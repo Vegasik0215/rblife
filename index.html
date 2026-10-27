@@ -1,0 +1,1101 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Симулятор жизни</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root{
+  --bg:#0e1014; --card:#181b22; --card2:#20242d; --line:#2a2f3a;
+  --text:#eef1f6; --muted:#8b93a3; --accent:#f5c542; --accent-ink:#1a1400;
+  --green:#3ecf6e; --red:#ff5d5d; --blue:#3d8bff;
+  --c-common:#9aa3ad; --c-nice:#3ecf6e; --c-rare:#3d8bff; --c-epic:#b26bff; --c-legend:#f5c542;
+  --r:16px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
+html,body{margin:0;background:var(--bg);color:var(--text);
+  font:15px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+body{padding-bottom:calc(76px + env(safe-area-inset-bottom))}
+button{font:inherit;color:inherit;border:0;cursor:pointer}
+img{display:block;max-width:100%}
+
+/* шапка */
+.top{position:sticky;top:0;z-index:5;background:linear-gradient(180deg,#14171d 0%,rgba(14,16,20,.96) 100%);
+  backdrop-filter:blur(8px);padding:12px 16px 10px;border-bottom:1px solid var(--line)}
+.money-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.label{font-size:12px;color:var(--muted)}
+.money{font-size:26px;font-weight:800;letter-spacing:-.5px}
+.money.neg{color:var(--red)}
+.btn-sleep{background:#2b2f6b;color:#d9dcff;padding:10px 14px;border-radius:12px;font-weight:700;white-space:nowrap}
+.btn-sleep:active{transform:scale(.97)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.stat{background:var(--card);border-radius:10px;padding:6px 8px}
+.stat .v{display:flex;justify-content:space-between;gap:4px;font-size:12px;color:var(--muted);white-space:nowrap}
+.stat .v span{overflow:hidden;text-overflow:ellipsis}
+.stat .v b{color:var(--text)}
+.bar{height:5px;background:#2a2f3a;border-radius:4px;margin-top:5px;overflow:hidden}
+.bar i{display:block;height:100%;border-radius:4px;transition:width .4s}
+.sub{margin-top:8px;font-size:12px;color:var(--muted);display:flex;justify-content:space-between}
+
+/* навигация */
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:6;display:grid;grid-template-columns:repeat(5,1fr);
+  background:#12151b;border-top:1px solid var(--line);padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+.tabs button{background:none;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 0;
+  color:var(--muted);font-size:11px;border-radius:10px}
+.tabs button .e{font-size:22px;line-height:1;filter:grayscale(.6);opacity:.75}
+.tabs button.on{color:var(--text)}
+.tabs button.on .e{filter:none;opacity:1}
+
+main{padding:14px 16px 20px}
+.seg{display:flex;background:var(--card);border-radius:12px;padding:3px;margin-bottom:14px;gap:2px;overflow-x:auto}
+.seg button{flex:1;background:none;padding:8px 6px;border-radius:9px;color:var(--muted);font-weight:600;font-size:13px;white-space:nowrap}
+.seg button.on{background:var(--card2);color:var(--text)}
+
+.card{background:var(--card);border-radius:var(--r);padding:14px;margin-bottom:12px}
+.card h3{margin:0 0 4px;font-size:17px}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.list .row{padding:10px 0;border-bottom:1px solid var(--line)}
+.list .row:last-child{border-bottom:0}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.btns{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.btn{flex:1;min-width:0;background:var(--accent);color:var(--accent-ink);font-weight:800;padding:11px 12px;border-radius:12px;text-align:center}
+.btn.sec{background:var(--card2);color:var(--text)}
+.btn.red{background:#3a1d22;color:#ff8f8f}
+.btn.ghost{background:none;border:1px solid var(--line);color:var(--muted)}
+.btn:active{transform:scale(.97)}
+.btn[disabled]{opacity:.4;pointer-events:none}
+.badge{display:inline-block;font-size:11px;font-weight:700;padding:3px 8px;border-radius:20px;background:var(--card2);color:var(--muted)}
+.big-ic{font-size:30px;width:46px;height:46px;display:grid;place-items:center;background:var(--card2);border-radius:12px;flex:none}
+.item{display:flex;gap:12px;align-items:flex-start}
+.item .body{flex:1;min-width:0}
+.price{font-weight:800}
+.plus{color:var(--green);font-weight:700}
+.minus{color:var(--red);font-weight:700}
+.lock{color:#ffb35c;font-size:12px;margin-top:4px}
+.empty{text-align:center;padding:30px 10px;color:var(--muted)}
+.empty .e{font-size:44px;margin-bottom:8px}
+
+.photo{border-radius:12px;width:100%;aspect-ratio:16/10;object-fit:cover;background:#22262f;margin-bottom:10px}
+.stage{position:relative;border-radius:14px;overflow:hidden;aspect-ratio:2/1;margin:6px 0 12px;
+  background:radial-gradient(ellipse at 50% 80%,#262b35 0%,#16191f 55%,#111317 100%)}
+.stage img{position:relative;z-index:1;width:100%;height:100%}
+.stage.cut img{object-fit:contain;padding:7% 3% 6%;filter:drop-shadow(0 10px 10px rgba(0,0,0,.5))}
+.stage.cut::after{content:"";position:absolute;left:14%;right:14%;bottom:9%;height:12%;
+  background:radial-gradient(ellipse at center,rgba(0,0,0,.75) 0%,transparent 70%)}
+.stage.photo img{object-fit:cover}
+.car-title{text-align:center;font-size:22px;font-weight:800;margin:2px 0 8px}
+.badges{display:flex;justify-content:center;gap:6px;flex-wrap:wrap}
+.cls{font-size:13px;font-weight:700;padding:5px 10px;border-radius:9px;color:#fff}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:4px}
+.tile{background:var(--card2);border-radius:12px;padding:10px 6px;text-align:center}
+.tile b{display:block;font-size:16px}
+.tile span{font-size:12px;color:var(--muted)}
+.menu{background:var(--card2);border-radius:14px;margin-top:12px;overflow:hidden}
+.menu button{display:flex;align-items:center;gap:12px;width:100%;background:none;padding:13px 14px;text-align:left;
+  border-bottom:1px solid var(--line)}
+.menu button:last-child{border-bottom:0}
+.menu .ic{font-size:22px;width:28px;text-align:center}
+.menu .t{flex:1}
+.menu .r{color:var(--muted);display:flex;align-items:center;gap:6px}
+.menu .r::after{content:"›";font-size:22px;line-height:1;color:#555c6a}
+.menu .danger .t{color:#ff8f8f}
+.car-plate{display:flex;justify-content:center;margin:-2px 0 8px}
+.plate{width:100%;max-width:300px;border-radius:6px}
+.plate.sm{max-width:150px}
+.plate.xs{max-width:110px}
+.tier{font-weight:800}
+.t-common{color:var(--c-common)} .t-nice{color:var(--c-nice)} .t-rare{color:var(--c-rare)}
+.t-epic{color:var(--c-epic)} .t-legend{color:var(--c-legend)}
+.pcard{border-left:4px solid var(--c)}
+.chances{display:flex;height:8px;border-radius:5px;overflow:hidden;margin:10px 0 6px}
+.chances i{display:block;height:100%}
+.leg{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:12px;color:var(--muted)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;vertical-align:middle}
+
+.progress{height:8px;background:#2a2f3a;border-radius:6px;overflow:hidden;margin-top:8px}
+.progress i{display:block;height:100%;background:linear-gradient(90deg,#f5c542,#ff9f43)}
+input.inp{width:100%;background:var(--card2);border:1px solid var(--line);color:var(--text);border-radius:12px;padding:12px;font:inherit;font-size:16px}
+
+/* рейтинг */
+.top-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
+.top-row:last-child{border-bottom:0}
+.top-row .n{width:28px;text-align:center;font-weight:800;font-size:16px}
+.top-row.me{background:linear-gradient(90deg,rgba(245,197,66,.12),transparent);border-radius:10px}
+
+/* тост */
+#toast{position:fixed;left:16px;right:16px;top:calc(12px + env(safe-area-inset-top));z-index:30;
+  background:#262b36;padding:12px 14px;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.4);
+  transform:translateY(-20px);opacity:0;transition:.25s;pointer-events:none;font-weight:600}
+#toast.show{transform:none;opacity:1}
+#toast.err{background:#3a1d22;color:#ffb3b3}
+
+/* шторка */
+.sheet{position:fixed;inset:0;z-index:20;display:flex;align-items:flex-end}
+.sheet.hidden{display:none}
+.sheet-bg{position:absolute;inset:0;background:rgba(0,0,0,.6);animation:fade .2s}
+.sheet-body{position:relative;width:100%;max-height:88vh;overflow:auto;background:#15181e;border-radius:20px 20px 0 0;
+  padding:16px 16px calc(20px + env(safe-area-inset-bottom));animation:up .25s ease-out}
+.sheet-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.sheet-head b{font-size:18px}
+.x{background:var(--card2);width:32px;height:32px;border-radius:50%}
+@keyframes up{from{transform:translateY(40px);opacity:0}}
+@keyframes fade{from{opacity:0}}
+
+/* барабан лотереи */
+.reel{position:relative;overflow:hidden;border-radius:14px;background:#0b0d11;padding:14px 0;margin:6px 0 14px}
+.strip{display:flex;gap:8px;will-change:transform}
+.ri{flex:none;width:132px;padding:12px 6px 10px;border-radius:10px;background:linear-gradient(0deg,color-mix(in srgb,var(--c) 30%,transparent),#1a1d24 70%);
+  border-bottom:4px solid var(--c)}
+.mp{background:#fafaf8;border:2px solid #111;border-radius:5px;color:#111;font:800 15px/28px system-ui,sans-serif;
+  text-align:center;white-space:nowrap;letter-spacing:.3px}
+.marker{position:absolute;top:0;bottom:0;left:50%;width:3px;margin-left:-1.5px;background:var(--accent);
+  box-shadow:0 0 12px var(--accent);z-index:2}
+.result{text-align:center;animation:pop .45s cubic-bezier(.2,1.6,.4,1)}
+.result .plate{margin:4px auto 12px;max-width:320px}
+.result.glow-legend .plate{box-shadow:0 0 0 3px var(--c-legend),0 0 40px var(--c-legend)}
+.result.glow-epic .plate{box-shadow:0 0 0 3px var(--c-epic),0 0 30px var(--c-epic)}
+.result h2{margin:0 0 4px;font-size:22px}
+@keyframes pop{from{transform:scale(.7);opacity:0}}
+.report div{padding:9px 0;border-bottom:1px solid var(--line)}
+.report div:last-child{border-bottom:0}
+.pick{display:flex;align-items:center;gap:12px;width:100%;background:var(--card);padding:10px;border-radius:12px;margin-bottom:8px;text-align:left}
+.loading{display:grid;place-items:center;height:60vh;color:var(--muted)}
+
+/* ---- новое ---- */
+.hbtn{position:relative;background:var(--card);width:44px;height:44px;border-radius:12px;font-size:22px;display:grid;place-items:center}
+.hbtn .dotb{position:absolute;top:6px;right:6px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--red);
+  color:#fff;font-size:10px;font-weight:800;line-height:16px;text-align:center}
+.hbtns{display:flex;gap:8px}
+.seg{scrollbar-width:none}.seg::-webkit-scrollbar{display:none}
+.seg button{flex:1 0 auto}
+.kv{display:grid;grid-template-columns:1fr auto;gap:6px 10px;font-size:14px}
+.kv span{color:var(--muted)}
+.lvl{display:inline-flex;gap:3px;vertical-align:middle}
+.lvl i{width:16px;height:6px;border-radius:3px;background:#2f3542}
+.lvl i.on{background:var(--accent)}
+.spark{width:100%;height:42px;display:block;margin-top:6px}
+.up{color:var(--green)} .down{color:var(--red)}
+.reels{display:flex;justify-content:center;gap:10px;margin:8px 0 4px}
+.reels div{width:72px;height:72px;border-radius:14px;background:#0b0d11;display:grid;place-items:center;font-size:40px;border:1px solid var(--line)}
+.reels.spin div{animation:shake .12s infinite}
+@keyframes shake{50%{transform:translateY(-4px)}}
+.wheel{width:96px;height:96px;margin:6px auto;border-radius:50%;display:grid;place-items:center;font-size:34px;font-weight:900;
+  border:6px solid #2a2f3a;background:#0b0d11}
+.wheel.red{border-color:#c8313e;color:#ff6b77}.wheel.black{border-color:#555;color:#ddd}.wheel.green{border-color:#2f9e5b;color:#6be39a}
+.wheel.spin{animation:rot .4s linear infinite}
+@keyframes rot{to{transform:rotate(360deg)}}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.chips button{background:var(--card2);padding:7px 10px;border-radius:9px;font-size:13px;font-weight:700}
+.chips button.on{background:var(--accent);color:var(--accent-ink)}
+.pill{display:inline-block;font-size:11px;font-weight:800;padding:2px 7px;border-radius:6px;background:#3a2f12;color:var(--accent)}
+.pill.g{background:#173a25;color:var(--green)} .pill.r{background:#3a1d22;color:#ff8f8f} .pill.b{background:#18284a;color:#7fb0ff}
+.mini-car{width:110px;height:56px;object-fit:contain;flex:none;border-radius:8px;background:#111317}
+.vs{display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:center}
+.vs .side{flex:1}
+.vs .side img{width:100%;height:70px;object-fit:contain}
+.vs .side.win b{color:var(--green)}
+.track{height:10px;background:#0b0d11;border-radius:6px;overflow:hidden;margin:6px 0}
+.track i{display:block;height:100%;width:0;background:var(--accent);transition:width 2.5s cubic-bezier(.3,.1,.2,1)}
+.rare-glow{box-shadow:0 0 0 2px var(--c-epic),0 0 30px rgba(178,107,255,.5)}
+.legend-glow{box-shadow:0 0 0 2px var(--c-legend),0 0 40px rgba(245,197,66,.6)}
+.logi{padding:10px 0;border-bottom:1px solid var(--line);font-size:14px}
+.logi .muted{font-size:12px}
+.flex1{flex:1;min-width:0}
+.sp{height:8px}
+textarea.inp,select.inp{width:100%;background:var(--card2);border:1px solid var(--line);color:var(--text);border-radius:12px;padding:12px;font:inherit;font-size:16px}
+</style>
+</head>
+<body>
+<header class="top" id="top" hidden>
+  <div class="money-row">
+    <div class="flex1"><div class="label" id="who">Деньги</div><div class="money" id="money">—</div></div>
+    <div class="hbtns">
+      <button class="hbtn" onclick="openDaily()" aria-label="Бонус">🎁<span class="dotb" id="dailyDot" hidden>!</span></button>
+      <button class="hbtn" onclick="openLog()" aria-label="События">🔔<span class="dotb" id="logDot" hidden></span></button>
+    </div>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="v"><span>⚡ Энергия</span><b id="sEn"></b></div><div class="bar"><i id="bEn" style="background:#f5c542"></i></div></div>
+    <div class="stat"><div class="v"><span>❤️ Здоровье</span><b id="sHe"></b></div><div class="bar"><i id="bHe" style="background:#ff5d6c"></i></div></div>
+    <div class="stat"><div class="v"><span>😊 Настрой</span><b id="sMo"></b></div><div class="bar"><i id="bMo" style="background:#3ecf6e"></i></div></div>
+  </div>
+  <div class="sub"><span id="day"></span><span id="worth"></span></div>
+</header>
+
+<main id="view"><div class="loading">Загрузка…</div></main>
+
+<nav class="tabs" id="tabs" hidden>
+  <button data-tab="life" class="on"><span class="e">🏠</span>Жизнь</button>
+  <button data-tab="money"><span class="e">💰</span>Финансы</button>
+  <button data-tab="auto"><span class="e">🚗</span>Авто</button>
+  <button data-tab="plates"><span class="e">🎰</span>Номера</button>
+  <button data-tab="people"><span class="e">👥</span>Игроки</button>
+</nav>
+
+<div id="toast"></div>
+<div id="sheet" class="sheet hidden">
+  <div class="sheet-bg" onclick="closeSheet()"></div>
+  <div class="sheet-body">
+    <div class="sheet-head"><b id="sheetTitle"></b><button class="x" onclick="closeSheet()">✕</button></div>
+    <div id="sheetContent"></div>
+  </div>
+</div>
+
+<script>
+const tg = window.Telegram && window.Telegram.WebApp;
+const tgv = v => !!(tg && tg.isVersionAtLeast && tg.isVersionAtLeast(v));
+try { tg.ready(); tg.expand(); } catch (e) {}
+try { if (tgv('6.1')) { tg.setHeaderColor('#14171d'); tg.setBackgroundColor('#0e1014'); } } catch (e) {}
+try { if (tgv('7.7')) tg.disableVerticalSwipes(); } catch (e) {}
+
+let CFG = null, S = null;
+const C = {};                       // кэш: top, market, social, auction, stocks, players
+let tab = 'life';
+const sub = { life: 'profile', money: 'biz', auto: 'salon', plates: 'cases', people: 'top' };
+let sheetLocked = false;
+const DEV_USER = new URLSearchParams(location.search).get('u');
+
+// ---------- утилиты ----------
+const $ = id => document.getElementById(id);
+const fmt = n => Math.round(n).toLocaleString('ru-RU').replace(/\s/g, ' ') + ' $';
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const tierColor = t => `var(--c-${t})`;
+// номер РБ рисуем прямо на телефоне (canvas) — сервер для картинок не нужен
+const PLATE_CACHE = {};
+const STYLE_BG = { std: '#fafaf8', taxi: '#f7c91e', eco: '#78c878' };
+function plateSrc(num, style) {
+  style = style || 'std';
+  const key = num + '|' + style;
+  if (PLATE_CACHE[key]) return PLATE_CACHE[key];
+  const W = 1040, H = 224, ox = 10, oy = 10;
+  const c = document.createElement('canvas'); c.width = W + 20; c.height = H + 20;
+  const x = c.getContext('2d');
+  const rr = (X, Y, w, h, r) => { x.beginPath(); x.moveTo(X + r, Y); x.arcTo(X + w, Y, X + w, Y + h, r); x.arcTo(X + w, Y + h, X, Y + h, r); x.arcTo(X, Y + h, X, Y, r); x.arcTo(X, Y, X + w, Y, r); x.closePath(); };
+  rr(ox, oy, W, H, 22); x.fillStyle = STYLE_BG[style] || STYLE_BG.std; x.fill();
+  rr(ox + 8, oy + 8, W - 16, H - 16, 16); x.lineWidth = 7; x.strokeStyle = '#141414'; x.stroke();
+  const fx = ox + 30, fy = oy + 38, fw = 112, fh = 70, ow = Math.floor(fw / 9);
+  x.fillStyle = '#c8313e'; x.fillRect(fx, fy, fw, fh * 2 / 3);
+  x.fillStyle = '#4aa657'; x.fillRect(fx, fy + fh * 2 / 3, fw, fh / 3);
+  x.fillStyle = '#fff'; x.fillRect(fx, fy, ow, fh); x.fillStyle = '#c8313e';
+  for (let cy = fy + ow / 2; cy < fy + fh; cy += ow) {
+    const cx = fx + ow / 2, r = ow / 2 - 1;
+    x.beginPath(); x.moveTo(cx, cy - r); x.lineTo(cx + r, cy); x.lineTo(cx, cy + r); x.lineTo(cx - r, cy); x.fill();
+  }
+  x.strokeStyle = '#3c3c3c'; x.lineWidth = 1; x.strokeRect(fx, fy, fw, fh);
+  x.fillStyle = '#141414'; x.textAlign = 'center'; x.textBaseline = 'alphabetic';
+  x.font = 'bold 62px Arial, "DejaVu Sans", sans-serif'; x.fillText('BY', ox + 86, oy + 182);
+  const a0 = ox + 170, a1 = ox + W - 30;
+  const fam = '"Arial Narrow", "Roboto Condensed", "DejaVu Sans Condensed", "Liberation Sans Narrow", Arial, sans-serif';
+  let size = 190;
+  do { x.font = `bold ${size}px ${fam}`; if (x.measureText(num).width <= a1 - a0) break; size -= 4; } while (size > 40);
+  x.fillStyle = '#0f0f0f'; x.textBaseline = 'middle'; x.fillText(num, (a0 + a1) / 2, oy + H / 2 + 8);
+  x.fillStyle = '#afafaf';
+  for (const bx of [ox + W * 0.3, ox + W * 0.75]) { x.beginPath(); x.arc(bx, oy + 32, 6, 0, Math.PI * 2); x.fill(); }
+  return PLATE_CACHE[key] = c.toDataURL('image/png');
+}
+const plateImg = (num, cls = '', style) => `<img class="plate ${cls}" src="${plateSrc(num, style)}" alt="${num}" loading="lazy">`;
+const carSrc = m => `cars/${m}.webp`;
+// нет фото машины — показываем название
+document.addEventListener('error', e => {
+  const t = e.target;
+  if (!t || t.tagName !== 'IMG' || !t.src.includes('/cars/') || t.dataset.f) return;
+  t.dataset.f = 1;
+  const m = t.src.split('/cars/')[1].split('.')[0], name = CFG && CFG.cars[m] ? CFG.cars[m].name : '';
+  t.src = 'data:image/svg+xml;utf8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="600" height="300"><text x="300" y="165" font-size="46" font-family="sans-serif" font-weight="700" fill="#c9ced8" text-anchor="middle">${name}</text></svg>`);
+}, true);
+const CLS_COLORS = { 'Эконом': '#5b6472', 'Комфорт': '#2f9e5b', 'Бизнес': '#2f6fd6', 'Спорт': '#e0603a', 'Премиум': '#8b46e0', 'Люкс': '#e2475e', 'Редкая': '#b26bff', 'Легенда': '#d4a017' };
+const mmss = s => { s = Math.max(0, s | 0); return `${String(s / 60 | 0).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; };
+const pct = x => (x * 100).toFixed(x * 100 % 1 ? 1 : 0) + ' %';
+
+function carStage(model, extra = '') {
+  const cut = CFG.cutouts && CFG.cutouts[model];
+  return `<div class="stage ${cut ? 'cut' : 'photo'} ${extra}"><img src="${carSrc(model)}" alt="" loading="lazy"></div>`;
+}
+function carBadges(c) {
+  return `<div class="badges"><span class="cls" style="background:${CLS_COLORS[c.cls] || '#5b6472'}">${c.cls}</span>
+    <span class="badge" style="font-size:13px;padding:5px 10px">${c.country}</span></div>`;
+}
+function lvlBar(n, max) { let h = ''; for (let i = 0; i < max; i++) h += `<i class="${i < n ? 'on' : ''}"></i>`; return `<span class="lvl">${h}</span>`; }
+function haptic(kind) {
+  try {
+    if (!tgv('6.1')) return;
+    if (['success', 'error', 'warning'].includes(kind)) tg.HapticFeedback.notificationOccurred(kind);
+    else tg.HapticFeedback.impactOccurred(kind || 'light');
+  } catch (e) {}
+}
+let toastTimer;
+function toast(msg, err) {
+  const t = $('toast'); t.textContent = msg; t.className = 'show' + (err ? ' err' : '');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.className = '', 2800);
+}
+function ask(text) {
+  if (tgv('6.2')) return new Promise(r => tg.showConfirm(text, r));
+  return Promise.resolve(confirm(text));
+}
+const API = new URLSearchParams(location.search).get('api') || 'https://dkhhdtakexroxxkshjhy.supabase.co/functions/v1/game';
+const BOT = 'RBLife_bot';
+const inTG = !!(tg && tg.initData);
+const tokGet = () => { try { return localStorage.getItem('rb_token') || ''; } catch (e) { return ''; } };
+const tokSet = v => { try { v ? localStorage.setItem('rb_token', v) : localStorage.removeItem('rb_token'); } catch (e) {} };
+async function api(path, body) {
+  const opt = { headers: {} };
+  if (inTG) opt.headers['X-Init-Data'] = tg.initData;
+  else if (tokGet()) opt.headers['X-Token'] = tokGet();
+  if (DEV_USER) opt.headers['X-Dev-User'] = DEV_USER;
+  if (body) { opt.method = 'POST'; opt.headers['Content-Type'] = 'application/json'; opt.body = JSON.stringify(body); }
+  const r = await fetch(API + path.replace(/^\/api/, ''), opt);
+  if (r.status === 401) { if (!inTG) { tokSet(''); showLogin(); } throw new Error('auth'); }
+  return r.json();
+}
+// ---------- вход в приложении (вне Telegram) ----------
+function showLogin(msg) {
+  $('top').hidden = true; $('tabs').hidden = true;
+  $('view').innerHTML = `<div class="card" style="margin-top:12vh;text-align:center"><div style="font-size:52px">🚗</div>
+    <h3 style="font-size:22px">Симулятор жизни</h3>
+    <div class="small muted" style="margin:10px 0 16px;line-height:1.6">1. Открой в Telegram бота <b style="color:var(--text)">@${BOT}</b><br>
+      2. Отправь ему команду <b style="color:var(--text)">/login</b><br>3. Введи код из 6 цифр</div>
+    <input class="inp" id="lcode" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="one-time-code"
+      style="text-align:center;font-size:26px;letter-spacing:8px" onkeydown="if(event.key==='Enter')doLogin()">
+    <div class="btns"><button class="btn" onclick="doLogin()">Войти</button></div>
+    <div class="btns"><a class="btn ghost" style="text-decoration:none" href="https://t.me/${BOT}">Открыть бота</a></div>
+    ${msg ? `<div class="small" style="color:#ff8f8f;margin-top:10px">${esc(msg)}</div>` : ''}</div>`;
+}
+async function doLogin() {
+  const code = (($('lcode') || {}).value || '').trim();
+  if (!/^\d{6}$/.test(code)) return toast('Введи 6 цифр кода', true);
+  let r;
+  try { r = await fetch(API + '/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) }).then(x => x.json()); }
+  catch (e) { return showLogin('Нет связи с сервером'); }
+  if (!r.ok) return showLogin(r.error);
+  tokSet(r.token); start();
+}
+async function logout() { if (await ask('Выйти из аккаунта на этом устройстве?')) { tokSet(''); location.reload(); } }
+async function act(action, params = {}, quiet = false) {
+  let res;
+  try { res = await api('/api/action', { action, ...params }); }
+  catch (e) { toast('Нет связи с сервером', true); return null; }
+  if (!res.ok) { toast(res.error, true); haptic('error'); return null; }
+  S = res.state;
+  if (res.message && !quiet) { toast(res.message); haptic('success'); }
+  renderHeader(); render();
+  return res;
+}
+async function load(key, path) {
+  try { C[key] = await api(path); } catch (e) { C[key] = null; }
+  render();
+}
+const num = id => parseInt(($(id) || {}).value, 10);
+
+// ---------- шапка и таймер ----------
+let tickEnd = 0;
+function renderHeader() {
+  $('money').textContent = fmt(S.money);
+  $('money').classList.toggle('neg', S.money < 0);
+  $('who').textContent = `${S.name} · ${CFG.cities[S.city].name}`;
+  for (const [k, id] of [['energy', 'En'], ['health', 'He'], ['mood', 'Mo']]) {
+    $('s' + id).textContent = S[k]; $('b' + id).style.width = S[k] + '%';
+  }
+  $('worth').textContent = `📈 ${fmt(S.net_worth)}`;
+  $('dailyDot').hidden = !S.daily_available;
+  $('logDot').hidden = !S.log_unread; $('logDot').textContent = S.log_unread > 9 ? '9+' : S.log_unread;
+  tickEnd = Date.now() + S.next_tick * 1000;
+  drawTimer();
+}
+function drawTimer() {
+  if (!S) return;
+  const left = (tickEnd - Date.now()) / 1000;
+  $('day').textContent = `📅 День ${S.day} · новый через ${mmss(left)}`;
+  return left;
+}
+setInterval(async () => {
+  if (!S) return;
+  if (drawTimer() <= 0) {
+    tickEnd = Date.now() + 60000;
+    try {
+      const r = await api('/api/state');
+      if (r.ok) { const was = S.day; S = r.state; renderHeader(); render(); if (S.day > was) { toast(`🌅 Наступил день ${S.day}`); haptic('success'); } }
+    } catch (e) {}
+  }
+}, 1000);
+
+function seg(group, items) {
+  return `<div class="seg">${items.map(([k, t]) =>
+    `<button class="${sub[group] === k ? 'on' : ''}" onclick="setSub('${group}','${k}')">${t}</button>`).join('')}</div>`;
+}
+function setSub(g, k) { sub[g] = k; onEnter(); render(); window.scrollTo(0, 0); }
+function goto(t, s) { tab = t; if (s) sub[t] = s; syncTabs(); onEnter(); render(); window.scrollTo(0, 0); }
+function syncTabs() { document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x.dataset.tab === tab)); }
+function onEnter() {   // подгружаем данные раздела
+  const s = sub[tab];
+  if (tab === 'people' && s === 'top') load('top', '/api/top');
+  if (tab === 'people' && s === 'market') load('market', '/api/market');
+  if ((tab === 'people' && s === 'offers') || (tab === 'auto' && s === 'races')) load('social', '/api/social');
+  if (tab === 'plates' && s === 'auction') load('auction', '/api/auction');
+  if (tab === 'money' && s === 'stocks') load('stocks', '/api/stocks');
+}
+function render() {
+  if (!S) return;
+  $('view').innerHTML = ({ life: vLife, money: vMoney, auto: vAuto, plates: vPlates, people: vPeople })[tab]();
+}
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => { haptic('light'); goto(b.dataset.tab); });
+
+// ================= ЖИЗНЬ =================
+function vLife() {
+  let h = seg('life', [['profile', '👤 Профиль'], ['work', '💼 Работа'], ['study', '🎓 Учёба'], ['rest', '🎉 Отдых'], ['city', '🏙 Город']]);
+  return h + ({ profile: vProfile, work: vWork, study: vStudy, rest: vRest, city: vCity })[sub.life]();
+}
+function bestCar() {
+  if (!S.cars.length) return null;
+  return S.cars.reduce((a, b) => CFG.cars[b.model].price > CFG.cars[a.model].price ? b : a);
+}
+function vProfile() {
+  const p = Math.min(100, Math.max(0, S.net_worth / CFG.goal * 100));
+  const car = bestCar();
+  const job = S.job ? CFG.jobs[S.job] : null;
+  const debt = S.loans.reduce((a, l) => a + l.left, 0);
+  let h = `<div class="card">
+    <div class="row"><h3>🎯 Цель: миллионер</h3><span class="badge">${p.toFixed(1)}%</span></div>
+    <div class="progress"><i style="width:${p}%"></i></div>
+    <div class="small muted" style="margin-top:6px">${fmt(S.net_worth)} из ${fmt(CFG.goal)}${S.goal ? ' · 🏆 Цель достигнута!' : ''}</div>
+  </div>`;
+  h += `<div class="card" onclick="openDaily()"><div class="row"><div><h3>🎁 Ежедневный бонус</h3>
+    <div class="small muted">Серия: ${S.streak} дн. · 7-й день — бонус и бесплатный кейс</div></div>
+    <button class="btn" style="flex:none" ${S.daily_available ? '' : 'disabled'}>${S.daily_available ? 'Забрать' : '✔️'}</button></div></div>`;
+  if (car) {
+    h += `<div class="card" onclick="goto('auto','garage')">${carStage(car.model)}
+      ${car.plate ? `<div class="car-plate">${plateImg(car.plate, 'sm', car.plate_style)}</div>` : ''}
+      <div class="row"><b>🚗 ${esc(CFG.cars[car.model].name)}</b><span class="badge">${S.cars.length} в гараже</span></div></div>`;
+  }
+  h += `<div class="card list">
+    <div class="row"><span>🏙 Город</span><b>${CFG.cities[S.city].name}</b></div>
+    <div class="row"><span>🎓 Образование</span><b>${CFG.edu_names[S.edu]}</b></div>
+    <div class="row"><span>💼 Работа</span><b>${job ? job.icon + ' ' + job.name : 'нет'}</b></div>
+    <div class="row"><span>⭐ Опыт</span><b>${S.exp}</b></div>
+    <div class="row"><span>💵 Пассивный доход</span><b class="plus">+${fmt(S.passive)}/день</b></div>
+    <div class="row"><span>🧾 Расходы и платежи</span><b class="minus">−${fmt(S.expenses)}/день</b></div>
+    ${S.set_bonus ? `<div class="row"><span>💎 Бонус коллекций</span><b class="plus">+${pct(S.set_bonus)}</b></div>` : ''}
+    <div class="row"><span>🏦 Вклад</span><b>${fmt(S.deposit)}</b></div>
+    ${debt ? `<div class="row"><span>💳 Долг по кредитам</span><b class="minus">${fmt(debt)}</b></div>` : ''}
+    <div class="row"><span>🏁 Гонки</span><b>🏆 ${S.stats.races_won || 0} · 💨 ${S.stats.races_lost || 0}</b></div>
+  </div>
+  <div class="card small muted">⏱ 1 игровой день = ${Math.round(CFG.day_seconds / 60)} мин. реального времени. Каждый новый день:
+    доход бизнеса, аренда, проценты, расходы, платежи по кредитам и полная энергия. Налоги: зарплата ${pct(CFG.taxes.income)},
+    бизнес ${pct(CFG.taxes.biz)}, недвижимость ${(CFG.taxes.prop * 100).toFixed(2)} % в день.</div>
+  <div class="card"><div class="row"><div><h3>🔔 Уведомления в боте</h3><div class="small muted">Доход, обгоны в топе, напоминания</div></div>
+    <button class="btn ${S.notify ? '' : 'sec'}" style="flex:none" onclick="act('notify',{on:${!S.notify}})">${S.notify ? 'Вкл' : 'Выкл'}</button></div></div>
+  <div class="card"><h3>🎁 Промокод</h3><div class="small muted" style="margin-bottom:10px">Есть код? Введи и получи бонус.</div>
+    <input class="inp" id="promoInp" placeholder="Введи код" autocomplete="off" autocapitalize="characters" onkeydown="if(event.key==='Enter')usePromo()">
+    <div class="btns"><button class="btn" onclick="usePromo()">Активировать</button></div></div>
+  <button class="btn ghost" style="width:100%" onclick="resetGame()">🔄 Начать жизнь заново</button>
+  ${inTG ? '' : '<button class="btn ghost" style="width:100%;margin-top:8px" onclick="logout()">🚪 Выйти</button>'}`;
+  return h;
+}
+async function usePromo() {
+  const code = ($('promoInp').value || '').trim();
+  if (!code) return toast('Введи промокод', true);
+  const r = await act('promo', { code });
+  if (r && $('promoInp')) $('promoInp').value = '';
+}
+async function resetGame() { if (await ask('Начать жизнь заново? Весь прогресс, машины и номера пропадут.')) act('reset'); }
+
+function openDaily() {
+  const day = S.daily_available ? (S.streak % 7) + 1 : ((S.streak - 1) % 7) + 1;
+  let cells = '';
+  for (let i = 1; i <= 7; i++) {
+    const done = S.daily_available ? i < day : i <= day;
+    cells += `<div class="tile" style="${i === day && S.daily_available ? 'outline:2px solid var(--accent)' : ''}">
+      <b>${i === 7 ? '🎁' : done ? '✅' : '💵'}</b><span>День ${i}<br>${fmt(CFG.daily.base * i + (i === 7 ? CFG.daily.week : 0))}</span></div>`;
+  }
+  openSheet('🎁 Ежедневный бонус', `<div class="small muted">Заходи каждый день подряд — награда растёт. Пропустишь день — серия начнётся заново.</div>
+    <div class="tiles" style="grid-template-columns:repeat(4,1fr);margin-top:12px">${cells}</div>
+    <div class="btns"><button class="btn" ${S.daily_available ? '' : 'disabled'} onclick="claimDaily()">${S.daily_available ? 'Забрать бонус' : 'Уже получен — приходи завтра'}</button></div>`);
+}
+async function claimDaily() { const r = await act('daily'); if (r) { haptic('success'); closeSheet(); } }
+
+function openLog() {
+  const items = S.log.slice().reverse();
+  openSheet('📰 События', items.length ? items.map(e => `<div class="logi"><div class="muted">День ${e.day} · ${new Date(e.t * 1000).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</div>${esc(e.text).replace(/ · /g, '<br>')}</div>`).join('')
+    : '<div class="empty"><div class="e">📰</div>Пока ничего не произошло</div>');
+  if (S.log_unread) act('read_log', {}, true);
+}
+
+function vWork() {
+  return Object.entries(CFG.jobs).map(([id, j]) => {
+    const lock = S.jobs_locked[id];
+    const tired = S.energy < j.energy;
+    const net = Math.round(S.job_pay[id] * (1 - CFG.taxes.income));
+    const taxiNote = id === 'taxi' ? `<div class="small muted">Оплата зависит от класса твоей лучшей машины. Жёлтый номер такси: +20 %</div>` : '';
+    return `<div class="card item"><div class="big-ic">${j.icon}</div><div class="body">
+      <div class="row"><b>${j.name}</b>${S.job === id ? '<span class="badge">текущая</span>' : ''}</div>
+      <div class="small muted">~${fmt(net)} за смену после налога · ⚡${j.energy}</div>${taxiNote}
+      ${lock ? `<div class="lock">🔒 ${lock}</div>` : ''}
+      <div class="btns"><button class="btn ${lock || tired ? 'sec' : ''}" ${lock ? 'disabled' : ''} onclick="act('work',{job:'${id}'})">${tired && !lock ? '😴 Нет сил' : 'Работать'}</button></div>
+    </div></div>`;
+  }).join('');
+}
+function vStudy() {
+  if (S.edu >= CFG.edu_names.length - 1) return `<div class="card empty"><div class="e">🎓</div>Ты получил максимальное образование — MBA!</div>`;
+  return `<div class="card"><div class="muted small">Текущий уровень</div><h3>🎓 ${CFG.edu_names[S.edu]}</h3>
+    <div class="muted small" style="margin-top:10px">Следующий: <b style="color:var(--text)">${CFG.edu_names[S.edu + 1]}</b></div>
+    <div class="progress"><i style="width:${S.study / S.study_need * 100}%"></i></div>
+    <div class="small muted" style="margin-top:6px">${S.study} из ${S.study_need} занятий</div>
+    <div class="btns"><button class="btn" onclick="act('study')">📖 Заниматься · ${fmt(S.study_price)} · ⚡${S.study_energy}</button></div></div>`;
+}
+function vRest() {
+  return `<div class="grid2">` + Object.entries(CFG.leisure).map(([id, l]) => {
+    const used = S.used.includes(id);
+    const eff = [`😊+${l.mood}`, l.health ? `❤️+${l.health}` : '', l.energy ? `⚡${l.energy > 0 ? '+' : ''}${l.energy}` : ''].filter(Boolean).join(' ');
+    return `<div class="card" style="margin:0"><div style="font-size:30px">${l.icon}</div><b>${l.name}</b>
+      <div class="small muted">${l.price ? fmt(l.price) : 'бесплатно'}</div><div class="small" style="margin-top:4px">${eff}</div>
+      <div class="btns"><button class="btn ${used ? 'sec' : ''}" ${used ? 'disabled' : ''} onclick="act('rest',{id:'${id}'})">${used ? '✔️ Было' : 'Пойти'}</button></div></div>`;
+  }).join('') + `</div>`;
+}
+function vCity() {
+  return `<div class="card small muted">Город влияет на зарплату, стоимость жизни и доход бизнеса. Переезд стоит денег.</div>` +
+    Object.entries(CFG.cities).map(([id, c]) => {
+      const here = id === S.city;
+      const m = (v, inv) => `<b class="${(inv ? v < 1 : v > 1) ? 'plus' : v === 1 ? '' : 'minus'}">×${v}</b>`;
+      return `<div class="card"><div class="row"><h3>🏙 ${c.name}</h3>${here ? '<span class="pill g">ты здесь</span>' : ''}</div>
+        <div class="kv" style="margin-top:8px"><span>Зарплата</span>${m(c.salary)}<span>Стоимость жизни</span>${m(c.living, true)}<span>Доход бизнеса</span>${m(c.biz)}</div>
+        ${here ? '' : `<div class="btns"><button class="btn ${S.money < c.move ? 'sec' : ''}" onclick="moveCity('${id}')">🚚 Переехать · ${fmt(c.move)}</button></div>`}</div>`;
+    }).join('');
+}
+async function moveCity(id) { const c = CFG.cities[id]; if (await ask(`Переехать в ${c.name} за ${fmt(c.move)}?`)) act('move', { city: id }); }
+
+// ================= ФИНАНСЫ =================
+function vMoney() {
+  let h = seg('money', [['biz', '🏪 Бизнес'], ['prop', '🏠 Жильё'], ['bank', '🏦 Банк'], ['stocks', '📈 Биржа'], ['casino', '🎲 Казино']]);
+  return h + ({ biz: vAssets, prop: vAssets, bank: vBank, stocks: vStocks, casino: vCasino })[sub.money]();
+}
+function vAssets() {
+  const kind = sub.money;
+  let h = `<div class="card small muted">${kind === 'biz'
+    ? `Бизнес приносит доход каждый день (±15 %). Налог ${pct(CFG.taxes.biz)}, доход зависит от города.`
+    : `Недвижимость сдаётся в аренду. Есть хоть один объект — не платишь за жильё. Можно купить в ипотеку: взнос ${pct(CFG.loans.down)}.`}
+    Продать можно за ${pct(CFG.sell_rate)} цены.</div>`;
+  h += Object.entries(CFG[kind]).map(([id, a]) => {
+    const n = S[kind][id] || 0;
+    return `<div class="card item"><div class="big-ic">${a.icon}</div><div class="body">
+      <div class="row"><b>${a.name}</b>${n ? `<span class="badge">у тебя: ${n}</span>` : ''}</div>
+      <div class="small"><span class="price">${fmt(a.price)}</span> · <span class="plus">+${fmt(a.income)}/день</span></div>
+      <div class="small muted">Окупится за ~${Math.ceil(a.price / a.income)} дн.</div>
+      <div class="btns"><button class="btn ${S.money < a.price ? 'sec' : ''}" onclick="act('buy_asset',{kind:'${kind}',id:'${id}'})">Купить</button>
+        ${kind === 'prop' ? `<button class="btn sec" onclick="mortgage('${id}')">🏦 Ипотека</button>` : ''}
+        ${n ? `<button class="btn red" onclick="sellAsset('${kind}','${id}')">Продать</button>` : ''}</div>
+    </div></div>`;
+  }).join('');
+  return h;
+}
+async function mortgage(id) {
+  const a = CFG.prop[id], [days, rate] = CFG.loans.prop;
+  const down = Math.round(a.price * CFG.loans.down), rest = a.price - down, pay = Math.ceil(rest * (1 + rate) / days);
+  if (await ask(`Ипотека на «${a.name}»: взнос ${fmt(down)}, потом ${fmt(pay)}/день ${days} дней (переплата ${pct(rate)}). ${CFG.loans.missed} пропуска подряд — банк заберёт жильё.`))
+    act('buy_asset', { kind: 'prop', id, credit: true });
+}
+async function sellAsset(kind, id) { const a = CFG[kind][id]; if (await ask(`Продать «${a.name}» за ${fmt(a.price * CFG.sell_rate)}?`)) act('sell_asset', { kind, id }); }
+
+function vBank() {
+  const [cd, cr] = CFG.loans.cash;
+  let h = `<div class="card"><div class="muted small">На вкладе</div><div class="money">${fmt(S.deposit)}</div>
+    <div class="small muted">${(CFG.deposit_rate * 100).toFixed(1)} % в день · завтра +${fmt(S.deposit * CFG.deposit_rate)}</div>
+    <input class="inp" id="bankAmt" type="number" inputmode="numeric" placeholder="Сумма, $" style="margin-top:12px">
+    <div class="btns"><button class="btn" onclick="bankOp('dep')">➕ Положить</button><button class="btn sec" onclick="bankOp('wd')">➖ Снять</button></div>
+    <div class="btns"><button class="btn ghost" onclick="act('bank',{op:'dep',amount:'all'})">Положить всё</button><button class="btn ghost" onclick="act('bank',{op:'wd',amount:'all'})">Снять всё</button></div></div>`;
+  h += `<div class="card"><h3>💳 Кредиты</h3>`;
+  if (!S.loans.length) h += `<div class="small muted">Кредитов нет.</div>`;
+  h += S.loans.map(l => `<div class="logi"><div class="row"><b>${esc(l.title)}</b>${l.missed ? `<span class="pill r">просрочка ${l.missed}/${CFG.loans.missed}</span>` : ''}</div>
+    <div class="small muted">Осталось ${fmt(l.left)} · платёж ${fmt(l.payment)}/день</div>
+    <div class="progress"><i style="width:${(1 - l.left / l.total) * 100}%"></i></div>
+    <div class="btns"><button class="btn sec" onclick="repay(${l.id})">Погасить досрочно · ${fmt(l.left)}</button></div></div>`).join('');
+  h += `</div><div class="card"><h3>🏦 Взять кредит наличными</h3>
+    <div class="small muted">До ${fmt(S.cash_limit)} на ${cd} дней, переплата ${pct(cr)}. Платёж списывается каждый день. ${CFG.loans.missed} пропуска — долг уйдёт коллекторам.</div>
+    <input class="inp" id="loanAmt" type="number" inputmode="numeric" placeholder="Сумма, $" style="margin-top:10px">
+    <div class="btns"><button class="btn" onclick="takeLoan()">Взять кредит</button></div></div>`;
+  return h;
+}
+function bankOp(op) { const v = num('bankAmt'); if (!v || v <= 0) return toast('Введи сумму', true); act('bank', { op, amount: v }); }
+async function takeLoan() {
+  const v = num('loanAmt'); if (!v) return toast('Введи сумму', true);
+  const [d, r] = CFG.loans.cash;
+  if (await ask(`Взять ${fmt(v)}? Вернуть ${fmt(v * (1 + r))}: по ${fmt(Math.ceil(v * (1 + r) / d))} в день ${d} дней.`)) act('loan', { amount: v });
+}
+async function repay(id) { if (await ask('Погасить кредит полностью?')) act('repay', { id }); }
+
+function spark(hist, up) {
+  if (!hist || hist.length < 2) return '';
+  const min = Math.min(...hist), max = Math.max(...hist), w = 300, hh = 42;
+  const pts = hist.map((v, i) => `${(i / (hist.length - 1) * w).toFixed(1)},${(hh - 4 - (v - min) / (max - min || 1) * (hh - 8)).toFixed(1)}`).join(' ');
+  return `<svg class="spark" viewBox="0 0 ${w} ${hh}" preserveAspectRatio="none"><polyline fill="none" stroke="${up ? '#3ecf6e' : '#ff5d5d'}" stroke-width="2" points="${pts}"/></svg>`;
+}
+function vStocks() {
+  const d = C.stocks;
+  if (!d) return `<div class="loading">Загрузка биржи…</div>`;
+  let h = `<div class="card small muted">Цены меняются каждый игровой день. Комиссия 0,5 %. Покупай дёшево — продавай дорого!</div>`;
+  h += d.stocks.map(s => {
+    const own = S.stocks[s.sym];
+    const pnl = own ? (s.price - own.avg) * own.qty : 0;
+    return `<div class="card" onclick="stockSheet('${s.sym}')"><div class="row"><div><b>${s.name}</b> <span class="muted small">${s.sym}</span></div>
+      <div style="text-align:right"><b>${s.price.toFixed(2)} $</b><div class="small ${s.change >= 0 ? 'up' : 'down'}">${s.change >= 0 ? '▲' : '▼'} ${Math.abs(s.change)} %</div></div></div>
+      ${spark(s.hist, s.hist[s.hist.length - 1] >= s.hist[0])}
+      ${own ? `<div class="small" style="margin-top:6px">У тебя ${own.qty} шт. · <span class="${pnl >= 0 ? 'up' : 'down'}">${pnl >= 0 ? '+' : ''}${fmt(pnl)}</span></div>` : ''}</div>`;
+  }).join('');
+  if (d.news.length) h += `<div class="card"><h3>📰 Новости рынка</h3>${d.news.slice().reverse().map(n => `<div class="logi"><span class="${n.up ? 'up' : 'down'}">${n.up ? '▲' : '▼'}</span> ${esc(n.text)}</div>`).join('')}</div>`;
+  return h;
+}
+function stockSheet(sym) {
+  const s = C.stocks.stocks.find(x => x.sym === sym), own = S.stocks[sym];
+  openSheet(`${s.name} · ${s.price.toFixed(2)} $`, `${spark(s.hist, s.change >= 0)}
+    ${own ? `<div class="small muted" style="margin:8px 0">У тебя ${own.qty} шт., средняя цена ${own.avg.toFixed(2)} $</div>` : ''}
+    <input class="inp" id="qty" type="number" inputmode="numeric" placeholder="Количество, шт." oninput="$('qcost').textContent=fmt((parseInt(this.value)||0)*${s.price})">
+    <div class="small muted" style="margin-top:6px">Сумма: <b id="qcost">0 $</b> · максимум ${Math.floor(S.money / s.price / 1.005)} шт.</div>
+    <div class="btns"><button class="btn" onclick="stockOp('stock_buy','${sym}')">Купить</button>${own ? `<button class="btn red" onclick="stockOp('stock_sell','${sym}')">Продать</button>` : ''}</div>
+    ${own ? `<div class="btns"><button class="btn ghost" onclick="stockAll('${sym}')">Продать все ${own.qty} шт.</button></div>` : ''}`);
+}
+async function stockOp(action, sym) { const q = num('qty'); if (!q || q <= 0) return toast('Введи количество', true); const r = await act(action, { sym, qty: q }); if (r) { closeSheet(); load('stocks', '/api/stocks'); } }
+async function stockAll(sym) { const r = await act('stock_sell', { sym, qty: 'all' }); if (r) { closeSheet(); load('stocks', '/api/stocks'); } }
+
+let rouletteKind = 'red';
+function vCasino() {
+  return `<div class="card small muted">Играй ответственно: в казино в среднем проигрывают. Максимальная ставка ${fmt(CFG.max_bet)}.</div>
+  <div class="card"><h3>🎡 Рулетка</h3><div class="wheel" id="wheel">?</div>
+    <div class="chips" id="rk">${[['red', '🔴 Красное ×2'], ['black', '⚫ Чёрное ×2'], ['even', 'Чёт ×2'], ['odd', 'Нечёт ×2'], ['number', 'Число ×36']]
+      .map(([k, t]) => `<button class="${rouletteKind === k ? 'on' : ''}" onclick="rouletteKind='${k}';render()">${t}</button>`).join('')}</div>
+    ${rouletteKind === 'number' ? `<input class="inp" id="rnum" type="number" min="0" max="36" placeholder="Число 0–36" style="margin-top:8px">` : ''}
+    <input class="inp" id="rbet" type="number" inputmode="numeric" placeholder="Ставка, $" style="margin-top:8px">
+    <div class="btns"><button class="btn" onclick="playRoulette()">Крутить</button></div><div class="small muted" id="rres" style="text-align:center;margin-top:8px"></div></div>
+  <div class="card"><h3>🎰 Слоты</h3><div class="reels" id="reels"><div>🍒</div><div>⭐</div><div>💎</div></div>
+    <div class="small muted" style="text-align:center">${CFG.slots.map(s => `${s}${s}${s} ×${CFG.slot_pays[s]}`).join(' · ')} · две 🍒 ×2 · две 💎 ×3 · любая пара ×0,5</div>
+    <input class="inp" id="sbet" type="number" inputmode="numeric" placeholder="Ставка, $" style="margin-top:8px">
+    <div class="btns"><button class="btn" onclick="playSlots()">Крутить</button></div><div class="small muted" id="sres" style="text-align:center;margin-top:8px"></div></div>`;
+}
+let busy = false;
+async function playRoulette() {
+  if (busy) return;
+  const bet = num('rbet'); if (!bet) return toast('Введи ставку', true);
+  const params = { bet, kind: rouletteKind }; if (rouletteKind === 'number') { params.number = num('rnum'); if (isNaN(params.number)) return toast('Введи число', true); }
+  busy = true; const w = $('wheel'); w.className = 'wheel spin'; w.textContent = '🎡';
+  const keep = { bet: $('rbet').value, num: $('rnum') && $('rnum').value };
+  let res; try { res = await api('/api/action', { action: 'roulette', ...params }); } catch (e) { busy = false; return toast('Нет связи', true); }
+  await new Promise(r => setTimeout(r, 1200)); busy = false;
+  if (!res.ok) { w.className = 'wheel'; w.textContent = '?'; return toast(res.error, true); }
+  S = res.state; renderHeader(); render();
+  const x = res.roulette, w2 = $('wheel'); w2.className = 'wheel ' + x.color; w2.textContent = x.n;
+  $('rbet').value = keep.bet; if ($('rnum')) $('rnum').value = keep.num || '';
+  $('rres').innerHTML = x.win ? `<b class="plus">Выигрыш ${fmt(x.win)}!</b>` : 'Не повезло…'; haptic(x.win ? 'success' : 'warning');
+}
+async function playSlots() {
+  if (busy) return;
+  const bet = num('sbet'); if (!bet) return toast('Введи ставку', true);
+  busy = true; const rl = $('reels'); rl.className = 'reels spin';
+  const keep = $('sbet').value;
+  const t = setInterval(() => rl.querySelectorAll('div').forEach(d => d.textContent = CFG.slots[Math.random() * CFG.slots.length | 0]), 90);
+  let res; try { res = await api('/api/action', { action: 'slots', bet }); } catch (e) { res = { ok: false, error: 'Нет связи' }; }
+  await new Promise(r => setTimeout(r, 1300)); clearInterval(t); busy = false;
+  if (!res.ok) { rl.className = 'reels'; return toast(res.error, true); }
+  S = res.state; renderHeader(); render();
+  const x = res.slots; $('reels').innerHTML = x.reels.map(s => `<div>${s}</div>`).join(''); $('sbet').value = keep;
+  $('sres').innerHTML = x.win ? `<b class="plus">Выигрыш ${fmt(x.win)}!</b>` : 'Пусто…'; haptic(x.win ? 'success' : 'warning');
+}
+
+// ================= АВТО =================
+function vAuto() {
+  let h = seg('auto', [['salon', '🚘 Салон'], ['garage', `🅿️ Гараж (${S.cars.length})`], ['races', '🏁 Гонки'], ['sets', '💎 Коллекции']]);
+  return h + ({ salon: vSalon, garage: vGarage, races: vRaces, sets: vSets })[sub.auto]();
+}
+function vSalon() {
+  const cc = CFG.car_case, total = Object.values(cc.drops).reduce((a, b) => a + b, 0);
+  const rare = Object.entries(cc.drops).filter(([m]) => CFG.cars[m].rare);
+  let h = `<div class="card" style="background:linear-gradient(135deg,#2a1f48,#181b22)"><div class="row"><h3>${cc.name}</h3><span class="price">${fmt(cc.price)}</span></div>
+    <div class="small muted">Случайная машина. Только здесь выпадают редкие: ${rare.map(([m, w]) => `<b style="color:var(--c-epic)">${CFG.cars[m].name}</b> ${(w / total * 100).toFixed(2)} %`).join(', ')}</div>
+    <div class="btns"><button class="btn ${S.money < cc.price ? 'sec' : ''}" onclick="openCarCase()">Открыть автокейс</button></div></div>`;
+  h += CFG.salon.map(id => {
+    const c = CFG.cars[id], owned = S.cars.filter(x => x.model === id).length;
+    return `<div class="card"><div class="car-title">${esc(c.name)}</div>${carBadges(c)}${carStage(id)}
+      <div class="tiles"><div class="tile"><b>${c.hp}</b><span>л.с.</span></div><div class="tile"><b>${fmt(c.price)}</b><span>цена</span></div><div class="tile"><b>${fmt(c.upkeep)}</b><span>в день</span></div></div>
+      <div class="small muted" style="text-align:center;margin-top:8px">😊 +${c.mood} к настроению · такси ×${CFG.taxi_mult[c.cls]}${owned ? ` · 🅿️ у тебя: ${owned}` : ''}</div>
+      <div class="btns"><button class="btn ${S.money < c.price ? 'sec' : ''}" onclick="buyCar('${id}')">Купить</button><button class="btn sec" onclick="carCredit('${id}')">🏦 В кредит</button></div></div>`;
+  }).join('') + `<div class="small muted" style="text-align:center">Фото: Wikimedia Commons</div>`;
+  return h;
+}
+async function buyCar(id) {
+  const c = CFG.cars[id];
+  if (S.money < c.price) { haptic('error'); return toast(`💸 Нужно ${fmt(c.price)}. Можно взять в кредит`, true); }
+  if (await ask(`Купить ${c.name} за ${fmt(c.price)}?`)) { const r = await act('buy_car', { model: id }); if (r) goto('auto', 'garage'); }
+}
+async function carCredit(id) {
+  const c = CFG.cars[id], [days, rate] = CFG.loans.car;
+  const down = Math.round(c.price * CFG.loans.down), pay = Math.ceil((c.price - down) * (1 + rate) / days);
+  if (await ask(`${c.name} в кредит: взнос ${fmt(down)}, потом ${fmt(pay)}/день ${days} дней (переплата ${pct(rate)}). ${CFG.loans.missed} пропуска — машину заберут.`)) {
+    const r = await act('buy_car', { model: id, credit: true }); if (r) goto('auto', 'garage');
+  }
+}
+async function openCarCase() {
+  const cc = CFG.car_case;
+  if (S.money < cc.price) { haptic('error'); return toast(`💸 Нужно ${fmt(cc.price)}`, true); }
+  let res; try { res = await api('/api/action', { action: 'car_case' }); } catch (e) { return toast('Нет связи', true); }
+  if (!res.ok) { haptic('error'); return toast(res.error, true); }
+  const models = Object.keys(cc.drops), weights = Object.values(cc.drops);
+  const pick = () => { let x = Math.random() * weights.reduce((a, b) => a + b); for (let i = 0; i < models.length; i++) { if ((x -= weights[i]) <= 0) return models[i]; } return models[0]; };
+  const W = 150, GAP = 8, N = 40, WIN = 34, items = [];
+  for (let i = 0; i < N; i++) items.push(i === WIN ? res.car_case.model : pick());
+  const col = m => CFG.cars[m].rare ? (CFG.cars[m].cls === 'Легенда' ? 'var(--c-legend)' : 'var(--c-epic)') : CFG.cars[m].price > 100000 ? 'var(--c-rare)' : 'var(--c-common)';
+  sheetLocked = true;
+  openSheet(cc.name, `<div class="reel" id="reel"><div class="marker"></div><div class="strip" id="strip">
+    ${items.map(m => `<div class="ri" style="--c:${col(m)};width:${W}px"><img src="${carSrc(m)}" style="width:100%;height:60px;object-fit:contain"><div class="small" style="text-align:center;margin-top:4px">${esc(CFG.cars[m].name)}</div></div>`).join('')}
+    </div></div><div id="spinOut" class="muted small" style="text-align:center">Крутим…</div>`);
+  const strip = $('strip'), reel = $('reel');
+  const target = WIN * (W + GAP) + W / 2 - reel.clientWidth / 2 + (Math.random() * 60 - 30);
+  void strip.offsetWidth; strip.style.transition = 'transform 5s cubic-bezier(.08,.75,.12,1)'; strip.style.transform = `translateX(${-target}px)`;
+  setTimeout(() => {
+    sheetLocked = false; S = res.state; renderHeader(); render();
+    const m = res.car_case.model, c = CFG.cars[m];
+    haptic('success');
+    $('spinOut').outerHTML = `<div class="result"><h2 style="color:${col(m)}">${c.rare ? (c.cls === 'Легенда' ? '🔥 ЛЕГЕНДА! ' : '💜 Редкая! ') : ''}${esc(c.name)}</h2>
+      ${carStage(m, c.rare ? (c.cls === 'Легенда' ? 'legend-glow' : 'rare-glow') : '')}
+      <div class="small muted">${c.hp} л.с. · стоимость ${fmt(c.price)} · уже в гараже</div>
+      <div class="btns"><button class="btn" onclick="openCarCase()">Ещё раз · ${fmt(cc.price)}</button></div>
+      <div class="btns"><button class="btn ghost" onclick="closeSheet();goto('auto','garage')">В гараж</button></div></div>`;
+  }, 5200);
+}
+function vGarage() {
+  if (!S.cars.length) return `<div class="card empty"><div class="e">🅿️</div>Гараж пуст.<br>Загляни в автосалон!
+    <div class="btns"><button class="btn" onclick="setSub('auto','salon')">🚘 В автосалон</button></div></div>`;
+  return S.cars.map(car => {
+    const c = CFG.cars[car.model];
+    return `<div class="card"><div class="car-title">${esc(c.name)}</div>${carBadges(c)}
+      ${carStage(car.model, c.rare ? (c.cls === 'Легенда' ? 'legend-glow' : 'rare-glow') : '')}
+      ${car.plate ? `<div class="car-plate">${plateImg(car.plate, 'sm', car.plate_style)}</div>` : ''}
+      ${car.on_loan ? `<div style="text-align:center;margin-bottom:8px"><span class="pill r">в кредите</span></div>` : ''}
+      <div class="tiles"><div class="tile"><b>${car.hp}</b><span>л.с.</span></div><div class="tile"><b>${fmt(car.value)}</b><span>стоимость</span></div><div class="tile"><b>+${car.mood_bonus}</b><span>😊 в день</span></div></div>
+      <div class="menu">
+        <button onclick="pickPlate(${car.id})"><span class="ic">🔢</span><span class="t">Номер</span><span class="r">${car.plate ? `<b class="t-${car.plate_tier}">${car.plate}</b>` : 'Нет'}</span></button>
+        <button onclick="tuneSheet(${car.id})"><span class="ic">🔧</span><span class="t">Тюнинг</span><span class="r">${Object.values(car.tune).reduce((a, b) => a + b, 0)} ур.</span></button>
+        <button onclick="raceFrom(${car.id})"><span class="ic">🏁</span><span class="t">Вызвать на гонку</span><span class="r"></span></button>
+        ${car.on_loan ? '' : `<button onclick="sellLot('car',${car.id})"><span class="ic">🏷</span><span class="t">Выставить на рынок</span><span class="r"></span></button>`}
+        ${car.on_loan ? '' : `<button class="danger" onclick="sellCar(${car.id})"><span class="ic">💵</span><span class="t">Продать банку</span><span class="r">${fmt(car.value)}</span></button>`}
+      </div></div>`;
+  }).join('');
+}
+function tuneSheet(cid) {
+  const car = S.cars.find(c => c.id === cid); if (!car) return closeSheet();
+  const price = CFG.cars[car.model].price;
+  openSheet(`🔧 Тюнинг · ${CFG.cars[car.model].name}`, `<div class="small muted">Мощность сейчас: <b style="color:var(--text)">${car.hp} л.с.</b>
+    При продаже вернётся ${pct(0.6)} вложенного.</div>` + Object.entries(CFG.tuning).map(([k, t]) => {
+      const lvl = car.tune[k] || 0, max = lvl >= t.levels, cost = Math.round(price * t.cost * (lvl + 1));
+      return `<div class="logi"><div class="row"><b>${t.icon} ${t.name}</b>${lvlBar(lvl, t.levels)}</div>
+        <div class="small muted">${t.hp ? `+${pct(t.hp)} мощности` : ''}${t.hp && t.mood ? ' · ' : ''}${t.mood ? `+${t.mood} 😊 в день` : ''} за уровень</div>
+        <div class="btns"><button class="btn ${max || S.money < cost ? 'sec' : ''}" ${max ? 'disabled' : ''} onclick="doTune(${cid},'${k}')">${max ? 'Максимум' : `Улучшить · ${fmt(cost)}`}</button></div></div>`;
+    }).join(''));
+}
+async function doTune(cid, part) { const r = await act('tune', { car: cid, part }); if (r) tuneSheet(cid); }
+async function sellCar(cid) { const car = S.cars.find(c => c.id === cid); if (await ask(`Продать ${CFG.cars[car.model].name} за ${fmt(car.value)}?`)) act('sell_car', { car: cid }); }
+function pickPlate(cid) {
+  const car = S.cars.find(c => c.id === cid);
+  const free = S.plates.filter(p => p.car_id !== cid);
+  openSheet(`Номер для ${CFG.cars[car.model].name}`, (car.plate ? `<div class="btns" style="margin:0 0 12px"><button class="btn sec" onclick="closeSheet();act('unplate',{car:${cid}})">Снять текущий номер</button></div>` : '') +
+    (free.length ? free.map(p => `<button class="pick" onclick="closeSheet();act('set_plate',{car:${cid},num:'${p.num}'})">${plateImg(p.num, 'sm', p.style)}
+      <div><div class="tier t-${p.tier}">${CFG.rarity[p.tier].emoji} ${CFG.rarity[p.tier].name}</div><div class="small muted">${p.car_id ? '🚗 на другой машине' : 'свободен'}</div></div></button>`).join('')
+      : `<div class="empty"><div class="e">🔢</div>Нет номеров — выбей в лотерее<div class="btns"><button class="btn" onclick="closeSheet();goto('plates','cases')">🎰 К кейсам</button></div></div>`));
+}
+function vSets() {
+  return `<div class="card small muted">Собери все машины из набора — получишь постоянный бонус к зарплате и доходу бизнеса. Бонусы складываются.</div>` +
+    Object.entries(CFG.sets).map(([id, st]) => {
+      const have = S.sets_have[id], done = have.length === st.cars.length;
+      return `<div class="card" style="${done ? 'outline:2px solid var(--green)' : ''}"><div class="row"><h3>${st.icon} ${st.name}</h3><span class="pill ${done ? 'g' : ''}">+${pct(st.bonus)}</span></div>
+        <div class="small muted">${have.length} из ${st.cars.length}${done ? ' · ✅ бонус активен' : ''}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">${st.cars.map(m => `<div style="flex:1;min-width:90px;text-align:center;opacity:${have.includes(m) ? 1 : .35}">
+          <img src="${carSrc(m)}" class="mini-car" style="width:100%"><div class="small">${have.includes(m) ? '✅ ' : ''}${esc(CFG.cars[m].name)}</div></div>`).join('')}</div></div>`;
+    }).join('');
+}
+
+// ---------- гонки ----------
+function vRaces() {
+  const d = C.social;
+  let h = `<div class="card small muted">Вызови другого игрока на гонку на ставку. Побеждает мощность (л.с. с тюнингом) плюс немного удачи. Победитель забирает обе ставки.</div>
+    <div class="btns" style="margin:0 0 12px"><button class="btn" onclick="raceFrom()">🏁 Вызвать игрока</button></div>`;
+  if (!d) return h + `<div class="loading">Загрузка…</div>`;
+  const pend = d.races.filter(r => r.status === 'pending'), done = d.races.filter(r => r.status === 'done');
+  if (pend.length) h += `<div class="card"><h3>⏳ Вызовы</h3>` + pend.map(r => `<div class="logi">
+    ${r.incoming ? `<b>${esc(r.from_name)}</b> вызывает тебя` : `Ты вызвал <b>${esc(r.to_name)}</b>`} · ставка <b>${fmt(r.bet)}</b>
+    ${r.from_car ? `<div class="small muted">Машина: ${esc(CFG.cars[r.from_car].name)}</div>` : ''}
+    <div class="btns">${r.incoming ? `<button class="btn" onclick="acceptRace(${r.id},${r.bet})">Принять</button><button class="btn sec" onclick="answerRace(${r.id},false)">Отказаться</button>`
+      : `<button class="btn sec" onclick="answerRace(${r.id},false)">Отменить вызов</button>`}</div></div>`).join('') + `</div>`;
+  h += `<div class="card"><h3>📜 Последние гонки</h3>` + (done.length ? done.map(r => {
+    const won = r.result.winner === (r.incoming ? r.to : r.from) ? true : false;
+    const meWon = r.incoming ? r.result.winner === r.to : r.result.winner === r.from;
+    return `<div class="logi"><div class="row"><span>${esc(r.from_name)} vs ${esc(r.to_name)}</span><span class="pill ${meWon ? 'g' : 'r'}">${meWon ? 'победа' : 'поражение'}</span></div>
+      <div class="small muted">${esc(CFG.cars[r.result.car_from].name)} ${r.result.t_from} с · ${esc(CFG.cars[r.result.car_to].name)} ${r.result.t_to} с · ставка ${fmt(r.bet)}</div></div>`;
+  }).join('') : `<div class="small muted">Пока не было</div>`) + `</div>`;
+  return h;
+}
+async function raceFrom(cid) {
+  if (!S.cars.length) return toast('🚗 Сначала купи машину', true);
+  const players = await api('/api/players');
+  openSheet('🏁 Кого вызвать?', players.filter(p => !p.me && p.cars).map(p => `<button class="pick" onclick="raceSetup(${p.id},'${esc(p.name).replace(/'/g, '')}',${cid || 'null'})">
+    <div class="big-ic">🏎</div><div class="flex1"><b>${esc(p.name)}</b><div class="small muted">${fmt(p.worth)} · машин: ${p.cars}</div></div></button>`).join('')
+    || '<div class="empty"><div class="e">🏁</div>Пока не с кем гоняться — у других игроков нет машин</div>');
+}
+function raceSetup(to, name, cid) {
+  openSheet(`🏁 Гонка с ${name}`, `<div class="small muted">Выбери машину и ставку</div>
+    ${S.cars.map(c => `<button class="pick" id="rc${c.id}" onclick="document.querySelectorAll('[id^=rc]').forEach(b=>b.style.outline='');this.style.outline='2px solid var(--accent)';window._rc=${c.id}">
+      <img class="mini-car" src="${carSrc(c.model)}"><div><b>${esc(CFG.cars[c.model].name)}</b><div class="small muted">${c.hp} л.с.</div></div></button>`).join('')}
+    <input class="inp" id="rbetv" type="number" inputmode="numeric" placeholder="Ставка, $ (от 100)">
+    <div class="btns"><button class="btn" onclick="sendRace(${to})">Бросить вызов</button></div>`);
+  window._rc = cid || (S.cars.length === 1 ? S.cars[0].id : null);
+  if (window._rc && $('rc' + window._rc)) $('rc' + window._rc).style.outline = '2px solid var(--accent)';
+}
+async function sendRace(to) {
+  if (!window._rc) return toast('Выбери машину', true);
+  const bet = num('rbetv'); if (!bet) return toast('Введи ставку', true);
+  const r = await act('race', { to, car: window._rc, bet }); if (r) { closeSheet(); goto('auto', 'races'); }
+}
+function acceptRace(id, bet) {
+  openSheet('🏁 На чём поедешь?', S.cars.map(c => `<button class="pick" onclick="answerRace(${id},true,${c.id})">
+    <img class="mini-car" src="${carSrc(c.model)}"><div><b>${esc(CFG.cars[c.model].name)}</b><div class="small muted">${c.hp} л.с.</div></div></button>`).join('')
+    + `<div class="small muted" style="margin-top:8px">Ставка ${fmt(bet)} спишется при старте</div>`);
+}
+async function answerRace(id, accept, car) {
+  let res; try { res = await api('/api/action', { action: 'race_answer', id, accept, car }); } catch (e) { return toast('Нет связи', true); }
+  if (!res.ok) return toast(res.error, true);
+  S = res.state; renderHeader();
+  if (!res.race) { closeSheet(); toast(res.message || 'Готово'); load('social', '/api/social'); return; }
+  const x = res.race, rr = (C.social && C.social.races.find(r => r.id === id)) || {}, meWon = rr.from !== undefined ? x.winner !== rr.from : x.winner === rr.to;
+  sheetLocked = true;
+  openSheet('🏁 Старт!', `<div class="vs"><div class="side" id="sa"><img src="${carSrc(x.car_from)}"><b>${esc(CFG.cars[x.car_from].name)}</b><div class="small muted">${x.hp_from} л.с.</div></div>
+    <b>VS</b><div class="side" id="sb"><img src="${carSrc(x.car_to)}"><b>${esc(CFG.cars[x.car_to].name)}</b><div class="small muted">${x.hp_to} л.с.</div></div></div>
+    <div class="track"><i id="ta"></i></div><div class="track"><i id="tb"></i></div><div id="rout" class="muted small" style="text-align:center">3… 2… 1…</div>`);
+  setTimeout(() => {
+    const tmin = Math.min(x.t_from, x.t_to);
+    $('ta').style.width = (tmin / x.t_from * 100) + '%'; $('tb').style.width = (tmin / x.t_to * 100) + '%';
+  }, 400);
+  setTimeout(() => {
+    sheetLocked = false;
+    $(x.t_to < x.t_from ? 'sb' : 'sa').classList.add('win');
+    $('rout').outerHTML = `<div class="result"><h2 class="${meWon ? 't-legend' : ''}">${meWon ? '🏆 Победа!' : '💨 Поражение'}</h2>
+      <div class="small muted">${x.t_from} с против ${x.t_to} с</div><div class="btns"><button class="btn" onclick="closeSheet()">OK</button></div></div>`;
+    haptic(meWon ? 'success' : 'error'); render(); load('social', '/api/social');
+  }, 3200);
+}
+
+// ================= НОМЕРА =================
+function vPlates() {
+  let h = seg('plates', [['cases', '🎰 Кейсы'], ['mine', `🔢 Мои (${S.plates.length})`], ['auction', '🔨 Аукцион']]);
+  return h + ({ cases: vCases, mine: vMine, auction: vAuction })[sub.plates]();
+}
+function chancesBar(ch) {
+  return `<div class="chances">${Object.entries(ch).map(([t, v]) => `<i style="width:${v}%;background:${tierColor(t)}"></i>`).join('')}</div>
+    <div class="leg">${Object.entries(ch).map(([t, v]) => `<span><span class="dot" style="background:${tierColor(t)}"></span>${CFG.rarity[t].name} ${String(v).replace('.', ',')}%</span>`).join('')}</div>`;
+}
+function vCases() {
+  let h = '';
+  const free = S.free_cases.std || 0;
+  if (free) h += `<div class="card" style="outline:2px solid var(--green)"><div class="row"><h3>🎁 Бесплатный кейс</h3><span class="pill g">×${free}</span></div>
+    <div class="small muted">Награда за неделю бонусов подряд</div><div class="btns"><button class="btn" onclick="spin('std',true)">Открыть бесплатно</button></div></div>`;
+  h += Object.entries(CFG.cases).map(([id, c]) => `<div class="card" ${c.seasonal ? 'style="background:linear-gradient(135deg,#3a2410,#181b22)"' : ''}>
+    <div class="row"><h3>${c.name}${c.seasonal ? ' <span class="pill">сезонный</span>' : ''}</h3><span class="price">${fmt(c.price)}</span></div>
+    ${chancesBar(c.chances)}<div class="btns"><button class="btn ${S.money < c.price ? 'sec' : ''}" onclick="spin('${id}')">Открыть кейс</button></div></div>`).join('');
+  h += `<div class="card"><h3>Редкость номеров</h3><div class="list">` + CFG.rarity_order.slice().reverse().map(t => `<div class="row" style="align-items:flex-start"><div>
+    <div class="tier t-${t}">${CFG.rarity[t].emoji} ${CFG.rarity[t].name}</div><div class="small muted">${CFG.rarity_rules[t]}</div></div><b style="white-space:nowrap">${fmt(CFG.rarity[t].value)}</b></div>`).join('') + `</div></div>`;
+  return h;
+}
+function vMine() {
+  if (!S.plates.length) return `<div class="card empty"><div class="e">🔢</div>Коллекция пуста.<br>Открой первый кейс!<div class="btns"><button class="btn" onclick="setSub('plates','cases')">🎰 К кейсам</button></div></div>`;
+  const total = S.plates.reduce((a, p) => a + p.value, 0);
+  return `<div class="card row"><span>💎 Стоимость коллекции</span><b>${fmt(total)}</b></div>` + S.plates.map(p => {
+    const r = CFG.rarity[p.tier], car = p.car_id ? S.cars.find(c => c.id === p.car_id) : null;
+    return `<div class="card pcard" style="--c:${tierColor(p.tier)}">${plateImg(p.num, '', p.style)}
+      <div class="row" style="margin-top:10px"><span class="tier t-${p.tier}">${r.emoji} ${r.name}${p.style !== 'std' ? ` · <span class="pill">${CFG.plate_styles[p.style].name}</span>` : ''}</span><b>${fmt(p.value)}</b></div>
+      <div class="small muted">📍 ${CFG.regions[+p.num.slice(-1)]}${car ? ` · 🚗 ${esc(CFG.cars[car.model].name)}` : ''}</div>
+      <div class="menu">
+        <button onclick="plateToCar('${p.num}')"><span class="ic">🚗</span><span class="t">На машину</span><span class="r"></span></button>
+        <button onclick="styleSheet('${p.num}')"><span class="ic">🎨</span><span class="t">Цвет номера</span><span class="r">${CFG.plate_styles[p.style].name}</span></button>
+        <button onclick="sellLot('plate','${p.num}')"><span class="ic">🏷</span><span class="t">На рынок</span><span class="r"></span></button>
+        <button onclick="giftPlate('${p.num}')"><span class="ic">🎁</span><span class="t">Подарить</span><span class="r"></span></button>
+        <button class="danger" onclick="sellPlate('${p.num}')"><span class="ic">💵</span><span class="t">Продать банку</span><span class="r">${fmt(p.value)}</span></button>
+      </div></div>`;
+  }).join('');
+}
+function styleSheet(numv) {
+  const p = S.plates.find(x => x.num === numv);
+  openSheet('🎨 Цвет номера', Object.entries(CFG.plate_styles).map(([k, st]) => `<button class="pick" onclick="closeSheet();act('restyle',{num:'${numv}',style:'${k}'})" ${p.style === k ? 'disabled style="opacity:.5"' : ''}>
+    ${plateImg(numv, 'sm', k)}<div><b>${st.name}</b><div class="small muted">${st.price ? fmt(st.price) : 'бесплатно'}${k === 'taxi' ? ' · +20 % к работе в такси' : ''}</div></div></button>`).join(''));
+}
+async function sellPlate(n) {
+  const p = S.plates.find(x => x.num === n);
+  if (await ask(`Продать номер ${n} банку за ${fmt(p.value)}? Он может достаться другому игроку.`)) { closeSheet(); act('sell_plate', { num: n }); }
+}
+function plateToCar(n) {
+  if (!S.cars.length) return toast('🚗 Сначала купи машину', true);
+  openSheet(`Повесить ${n}`, S.cars.map(car => `<button class="pick" onclick="closeSheet();act('set_plate',{car:${car.id},num:'${n}'})">
+    <img class="mini-car" src="${carSrc(car.model)}"><div><b>${esc(CFG.cars[car.model].name)}</b><div class="small muted">${car.plate ? 'сейчас: ' + car.plate : 'без номера'}</div></div></button>`).join(''));
+}
+// барабан номеров
+const LET = 'ABEIKMHOPCTX', rnd = n => Math.floor(Math.random() * n), rl = () => LET[rnd(12)];
+function fakePlate(t) {
+  const a = String(rnd(10)), b = String((+a + 1 + rnd(8)) % 10);
+  let d, l = rl() + rl();
+  if (t === 'common') d = String(rnd(9998) + 1).padStart(4, '0');
+  else if (t === 'nice') d = [a + b + b + a, a + a + b + b, a + b + a + b][rnd(3)];
+  else if (t === 'rare') d = [a + a + a + b, '00' + a + b, b + a + a + a][rnd(3)];
+  else { d = rnd(2) ? String(1 + rnd(9)).repeat(4) : '000' + (1 + rnd(9)); if (t === 'legend') { const c = rl(); l = c + c; } }
+  return `${d} ${l}-${1 + rnd(7)}`;
+}
+function rollTier(ch) { let x = Math.random() * 100; for (const [t, v] of Object.entries(ch)) { if ((x -= v) <= 0) return t; } return Object.keys(ch)[0]; }
+async function spin(caseId, free) {
+  const c = CFG.cases[caseId];
+  if (!free && S.money < c.price) { toast(`💸 Кейс стоит ${fmt(c.price)}`, true); haptic('error'); return; }
+  let res; try { res = await api('/api/action', { action: 'spin', case: caseId, free: !!free }); } catch (e) { return toast('Нет связи с сервером', true); }
+  if (!res.ok) { toast(res.error, true); haptic('error'); return; }
+  const W = 132, GAP = 8, N = 46, WIN = 40, items = [];
+  for (let i = 0; i < N; i++) { const t = i === WIN ? res.spin.tier : rollTier(c.chances); items.push({ t, num: i === WIN ? res.spin.num : fakePlate(t) }); }
+  sheetLocked = true;
+  openSheet(free ? '🎁 Бесплатный кейс' : c.name, `<div class="reel" id="reel"><div class="marker"></div><div class="strip" id="strip">
+    ${items.map(x => `<div class="ri" style="--c:${tierColor(x.t)}"><div class="mp">${x.num}</div></div>`).join('')}</div></div>
+    <div id="spinOut" class="muted small" style="text-align:center">Крутим барабан…</div>`);
+  new Image().src = plateSrc(res.spin.num);
+  const strip = $('strip'), reel = $('reel');
+  const target = WIN * (W + GAP) + W / 2 - reel.clientWidth / 2 + (Math.random() * 80 - 40);
+  void strip.offsetWidth; strip.style.transition = 'transform 5.2s cubic-bezier(.08,.75,.12,1)'; strip.style.transform = `translateX(${-target}px)`;
+  let ticks = 0; const tick = setInterval(() => { if (++ticks < 18) haptic('light'); }, 140);
+  setTimeout(() => {
+    clearInterval(tick); sheetLocked = false; S = res.state; renderHeader(); render();
+    const sp = res.spin, r = CFG.rarity[sp.tier];
+    const title = sp.tier === 'legend' ? '🔥 ДЖЕКПОТ! Блатной номер!' : sp.tier === 'epic' ? '💜 Эксклюзив!' : `${r.emoji} ${r.name} номер`;
+    haptic(sp.tier === 'common' ? 'light' : 'success');
+    $('spinOut').outerHTML = `<div class="result glow-${sp.tier}"><h2 class="t-${sp.tier}">${title}</h2>${plateImg(sp.num)}
+      <div class="small muted">📍 ${CFG.regions[+sp.num.slice(-1)]} · выкуп ${fmt(sp.value)}</div>
+      ${free ? '' : `<div class="btns"><button class="btn" onclick="spin('${caseId}')">🎰 Ещё раз · ${fmt(c.price)}</button></div>`}
+      <div class="btns"><button class="btn sec" onclick="closeSheet();plateToCar('${sp.num}')">🚗 На машину</button><button class="btn red" onclick="sellPlate('${sp.num}')">💵 Продать</button></div>
+      <div class="btns"><button class="btn ghost" onclick="closeSheet()">Забрать в коллекцию</button></div></div>`;
+  }, 5400);
+}
+let aucTimer = null;
+function vAuction() {
+  const a = C.auction;
+  clearInterval(aucTimer);
+  if (!a) return `<div class="loading">Загрузка аукциона…</div>`;
+  if (!a.open) return `<div class="card empty"><div class="e">🔨</div>Аукцион проходит каждый день в <b style="color:var(--text)">${a.next_hour}:00</b> и длится час.<br>
+    На торги выставляется один «Эксклюзив» или «Блатной» номер.${a.last ? `<div class="small" style="margin-top:12px">Прошлый лот: <b>${a.last.num}</b> — ${a.last.bidder ? 'продан за ' + fmt(a.last.bid) : 'без ставок'}</div>` : ''}</div>`;
+  aucTimer = setInterval(() => { const el = $('aleft'); if (!el) return clearInterval(aucTimer); a.left = Math.max(0, a.left - 1); el.textContent = mmss(a.left); if (!a.left) { clearInterval(aucTimer); load('auction', '/api/auction'); } }, 1000);
+  const mine = a.bidder && S && a.bidder_name && C.top && false;
+  return `<div class="card" style="text-align:center"><div class="small muted">Лот дня · ${CFG.rarity[a.tier].emoji} ${CFG.rarity[a.tier].name}</div>
+    <div style="margin:10px auto;max-width:320px" class="result glow-${a.tier}">${plateImg(a.num)}</div>
+    <div class="small muted">До конца: <b id="aleft" style="color:var(--text)">${mmss(a.left)}</b> · ставка в последние 2 мин продлевает торги</div>
+    <div class="tiles" style="margin-top:10px"><div class="tile"><b>${fmt(a.bid)}</b><span>${a.bidder ? 'текущая ставка' : 'стартовая цена'}</span></div>
+      <div class="tile"><b>${esc(a.bidder_name || '—')}</b><span>лидер</span></div><div class="tile"><b>${fmt(a.value)}</b><span>выкуп банком</span></div></div>
+    <input class="inp" id="bidv" type="number" inputmode="numeric" value="${a.min_bid}" style="margin-top:12px">
+    <div class="btns"><button class="btn" onclick="placeBid()">🔨 Сделать ставку</button></div>
+    <div class="small muted" style="margin-top:8px">Минимум ${fmt(a.min_bid)}. Деньги замораживаются; если тебя перебьют — вернутся.</div></div>`;
+}
+async function placeBid() { const v = num('bidv'); if (!v) return toast('Введи сумму', true); const r = await act('bid', { amount: v }); if (r) load('auction', '/api/auction'); }
+
+// ================= ИГРОКИ =================
+function vPeople() {
+  const inc = C.social ? C.social.offers.filter(o => o.incoming).length + C.social.races.filter(r => r.incoming && r.status === 'pending').length : 0;
+  let h = seg('people', [['top', '🏆 Топ'], ['market', '🛒 Рынок'], ['offers', `🔄 Предложения${inc ? ` (${inc})` : ''}`]]);
+  return h + ({ top: vTop, market: vMarket, offers: vOffers })[sub.people]();
+}
+function vTop() {
+  const d = C.top; if (!d) return `<div class="loading">Загрузка рейтинга…</div>`;
+  const medal = i => ['🥇', '🥈', '🥉'][i] || (i + 1);
+  return `<div class="card"><h3>🏆 Самые богатые</h3><div class="small muted">Нажми на игрока — откроется его профиль</div>` + d.top.map((x, i) => `
+    <div class="top-row ${x.me ? 'me' : ''}" onclick="${x.me ? '' : `openProfile(${x.id})`}"><div class="n">${medal(i)}</div>
+      <div class="flex1"><b>${esc(x.name)}${x.me ? ' (ты)' : ''}</b><div class="small muted">${fmt(x.worth)} · день ${x.day}${x.car ? ' · 🚗 ' + esc(x.car) : ''}</div></div>
+      ${x.plate ? `<img class="plate xs" src="${plateSrc(x.plate, x.plate_style)}" alt="">` : ''}</div>`).join('') +
+    (d.my_place > 30 ? `<div class="small muted" style="margin-top:10px">Твоё место: ${d.my_place} из ${d.total}</div>` : '') + `</div>`;
+}
+async function openProfile(id) {
+  let p; try { p = await api('/api/profile/' + id); } catch (e) { return toast('Нет связи', true); }
+  if (p.error) return toast(p.error, true);
+  window._prof = p;
+  openSheet(`👤 ${esc(p.name)}`, `<div class="kv"><span>Капитал</span><b>${fmt(p.worth)}</b><span>Город</span><b>${CFG.cities[p.city].name}</b>
+      <span>Образование</span><b>${CFG.edu_names[p.edu]}</b><span>Бизнесов / объектов</span><b>${p.biz} / ${p.prop}</b>
+      <span>Гонки</span><b>🏆 ${p.stats.races_won || 0} · 💨 ${p.stats.races_lost || 0}</b><span>Серия бонусов</span><b>${p.streak} дн.</b></div>
+    ${p.sets.length ? `<div style="margin-top:10px">${p.sets.map(s => `<span class="pill g" style="margin-right:4px">${CFG.sets[s].icon} ${CFG.sets[s].name}</span>`).join('')}</div>` : ''}
+    <div class="btns"><button class="btn" onclick="sendMoney(${id})">💸 Перевести</button><button class="btn sec" onclick="raceSetup(${id},'${esc(p.name).replace(/'/g, '')}')">🏁 Гонка</button></div>
+    <div class="btns"><button class="btn sec" onclick="giftPlate(null,${id})">🎁 Подарить номер</button><button class="btn sec" onclick="swapSetup(${id})">🔄 Обмен</button></div>
+    <h3 style="margin-top:16px">🅿️ Гараж</h3>${p.cars.length ? p.cars.map(c => `<div class="card" style="background:var(--card2)"><b>${esc(CFG.cars[c.model].name)}</b> <span class="muted small">${c.hp} л.с.</span>
+      ${carStage(c.model)}${c.plate ? `<div class="car-plate">${plateImg(c.plate, 'sm', c.plate_style)}</div>` : ''}</div>`).join('') : '<div class="small muted">Пусто</div>'}
+    <h3 style="margin-top:16px">🔢 Номера</h3>${p.plates.length ? p.plates.slice(0, 12).map(x => `<div style="margin-bottom:8px">${plateImg(x.num, 'sm', x.style)}</div>`).join('') : '<div class="small muted">Нет</div>'}`);
+}
+function sendMoney(id) {
+  openSheet('💸 Перевод', `<input class="inp" id="smv" type="number" inputmode="numeric" placeholder="Сумма, $">
+    <div class="btns"><button class="btn" onclick="doSend(${id})">Перевести</button></div><div class="small muted" style="margin-top:8px">Без комиссии. Отменить нельзя.</div>`);
+}
+async function doSend(id) { const v = num('smv'); if (!v) return toast('Введи сумму', true); if (await ask(`Перевести ${fmt(v)}?`)) { const r = await act('send', { to: id, amount: v }); if (r) closeSheet(); } }
+async function giftPlate(numv, to) {
+  if (!S.plates.length) return toast('У тебя нет номеров', true);
+  if (numv && !to) {   // выбрали номер — выбираем игрока
+    const players = await api('/api/players');
+    return openSheet(`🎁 Кому подарить ${numv}?`, players.filter(p => !p.me).map(p => `<button class="pick" onclick="doGift('${numv}',${p.id},'${esc(p.name).replace(/'/g, '')}')"><div class="big-ic">👤</div><div><b>${esc(p.name)}</b><div class="small muted">${fmt(p.worth)}</div></div></button>`).join('') || '<div class="empty">Других игроков пока нет</div>');
+  }
+  openSheet('🎁 Какой номер подарить?', S.plates.map(p => `<button class="pick" onclick="doGift('${p.num}',${to},'')">${plateImg(p.num, 'sm', p.style)}<div class="tier t-${p.tier}">${CFG.rarity[p.tier].name}</div></button>`).join(''));
+}
+async function doGift(n, to, name) { if (await ask(`Подарить номер ${n}${name ? ' игроку ' + name : ''}? Это навсегда.`)) { const r = await act('gift', { to, num: n }); if (r) closeSheet(); } }
+function swapSetup(id) {
+  const p = window._prof;
+  if (!S.plates.length) return toast('У тебя нет номеров для обмена', true);
+  if (!p.plates.length) return toast('У игрока нет номеров', true);
+  window._give = null; window._get = null;
+  const pick = (arr, key) => arr.map(x => `<button class="pick" data-k="${key}" onclick="document.querySelectorAll('[data-k=${key}]').forEach(b=>b.style.outline='');this.style.outline='2px solid var(--accent)';window._${key}='${x.num}'">${plateImg(x.num, 'sm', x.style)}<div class="tier t-${x.tier}">${CFG.rarity[x.tier].name}</div></button>`).join('');
+  openSheet('🔄 Обмен номерами', `<b>Отдаёшь</b>${pick(S.plates, 'give')}<b>Получаешь</b>${pick(p.plates, 'get')}
+    <div class="btns"><button class="btn" onclick="doSwap(${id})">Предложить обмен</button></div><div class="small muted" style="margin-top:8px">Игрок получит уведомление и сможет принять или отказаться (24 часа).</div>`);
+}
+async function doSwap(id) { if (!window._give || !window._get) return toast('Выбери оба номера', true); const r = await act('swap', { to: id, give: window._give, get: window._get }); if (r) closeSheet(); }
+
+function vMarket() {
+  const d = C.market; if (!d) return `<div class="loading">Загрузка рынка…</div>`;
+  let h = `<div class="card small muted">Покупай и продавай машины и номера другим игрокам. Комиссия продавца 5 %. Выставить можно в гараже или в «Моих номерах».</div>`;
+  if (!d.length) return h + `<div class="card empty"><div class="e">🛒</div>Пока пусто — выставь что-нибудь первым!</div>`;
+  return h + d.map(x => `<div class="card">${x.kind === 'car' ? `<div class="row"><b>${esc(CFG.cars[x.model].name)}</b><span class="muted small">${x.hp} л.с.</span></div>${carStage(x.model)}`
+    : `<div style="max-width:300px">${plateImg(x.num, '', x.style)}</div><div class="tier t-${x.tier}" style="margin-top:6px">${CFG.rarity[x.tier].emoji} ${CFG.rarity[x.tier].name}</div>`}
+    <div class="row" style="margin-top:8px"><span class="small muted">Продавец: ${esc(x.seller_name)}</span><b class="price">${fmt(x.price)}</b></div>
+    <div class="btns">${x.mine ? `<button class="btn sec" onclick="lotCancel(${x.id})">Снять с продажи</button>` : `<button class="btn ${S.money < x.price ? 'sec' : ''}" onclick="lotBuy(${x.id},${x.price})">Купить</button>`}</div></div>`).join('');
+}
+function sellLot(kind, ref) {
+  const title = kind === 'car' ? CFG.cars[S.cars.find(c => c.id === ref).model].name : `номер ${ref}`;
+  openSheet(`🏷 На рынок: ${title}`, `<input class="inp" id="lotp" type="number" inputmode="numeric" placeholder="Цена, $">
+    <div class="small muted" style="margin-top:8px">Тебе придёт цена минус 5 %. ${kind === 'car' ? 'Номер с машины останется у тебя.' : 'Номер снимется с машины.'}</div>
+    <div class="btns"><button class="btn" onclick="doLot('${kind}','${ref}')">Выставить</button></div>`);
+}
+async function doLot(kind, ref) { const v = num('lotp'); if (!v) return toast('Введи цену', true); const r = await act('sell_lot', { kind, ref: kind === 'car' ? +ref : ref, price: v }); if (r) { closeSheet(); goto('people', 'market'); } }
+async function lotBuy(id, price) { if (await ask(`Купить за ${fmt(price)}?`)) { const r = await act('buy_lot', { id }); if (r) load('market', '/api/market'); } }
+async function lotCancel(id) { const r = await act('cancel_lot', { id }); if (r) load('market', '/api/market'); }
+
+function vOffers() {
+  const d = C.social; if (!d) return `<div class="loading">Загрузка…</div>`;
+  const races = d.races.filter(r => r.status === 'pending');
+  let h = '';
+  if (races.length) h += `<div class="card"><div class="row"><h3>🏁 Вызовы на гонку</h3><button class="btn sec" style="flex:none" onclick="goto('auto','races')">Открыть</button></div><div class="small muted">${races.length} активн.</div></div>`;
+  if (!d.offers.length) return h + `<div class="card empty"><div class="e">🔄</div>Предложений обмена нет.<br>Открой профиль игрока в топе, чтобы предложить обмен.</div>`;
+  return h + d.offers.map(o => `<div class="card"><div class="small muted">${o.incoming ? `${esc(o.from_name)} предлагает` : `Ты предлагаешь ${esc(o.to_name)}`}</div>
+    <div class="row" style="margin-top:8px;align-items:center"><div class="flex1">${plateImg(o.give, 'sm')}<div class="small muted">${o.incoming ? 'получишь' : 'отдаёшь'}</div></div><b>⇄</b>
+      <div class="flex1">${plateImg(o.get, 'sm')}<div class="small muted">${o.incoming ? 'отдашь' : 'получишь'}</div></div></div>
+    <div class="btns">${o.incoming ? `<button class="btn" onclick="swapAns(${o.id},true)">Принять</button><button class="btn sec" onclick="swapAns(${o.id},false)">Отклонить</button>`
+      : `<button class="btn sec" onclick="swapAns(${o.id},false)">Отменить</button>`}</div></div>`).join('');
+}
+async function swapAns(id, accept) { const r = await act('swap_answer', { id, accept }); if (r) load('social', '/api/social'); }
+
+// ================= ШТОРКА =================
+function openSheet(title, html) { $('sheetTitle').textContent = title; $('sheetContent').innerHTML = html; $('sheet').classList.remove('hidden'); }
+function closeSheet() { if (sheetLocked) return; $('sheet').classList.add('hidden'); }
+
+// ================= СТАРТ =================
+async function start() {
+  if (!inTG && !tokGet() && !DEV_USER) return showLogin();
+  $('view').innerHTML = '<div class="loading">Загрузка…</div>';
+  try { [CFG, S] = await Promise.all([api('/api/config'), api('/api/state').then(r => r.state)]); }
+  catch (e) { if (e.message !== 'auth') $('view').innerHTML = `<div class="card empty"><div class="e">📡</div>Нет связи с сервером.<div class="btns"><button class="btn" onclick="start()">Повторить</button></div></div>`; return; }
+  $('top').hidden = false; $('tabs').hidden = false;
+  renderHeader(); render();
+  load('social', '/api/social');
+  if (S.daily_available) setTimeout(openDaily, 600);
+}
+start();
+</script>
+</body>
+</html>
