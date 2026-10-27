@@ -1,0 +1,39 @@
+plugins {
+    id 'com.android.application'
+}
+
+def run = Integer.parseInt(System.getenv("GITHUB_RUN_NUMBER") ?: "1")
+
+android {
+    namespace 'by.rblife.game'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "by.rblife.game"
+        minSdk 21
+        targetSdk 34
+        versionCode run
+        versionName "1.0." + run
+    }
+
+    signingConfigs {
+        release {
+            storeFile file("rblife.keystore")
+            storePassword "rblife-game"
+            keyAlias "rblife"
+            keyPassword "rblife-game"
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
