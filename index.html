@@ -680,7 +680,7 @@ function vAssets() {
     const n = S[kind][id] || 0;
     return `<div class="card item"><div class="big-ic">${a.icon}</div><div class="body">
       <div class="row"><b>${a.name}</b>${n ? `<span class="badge">у тебя: ${n}</span>` : ''}</div>
-      <div class="small"><span class="price">${fmt(a.price)}</span> · <span class="plus">+${fmt(a.income)}${kind === 'biz' ? ` раз в ${CFG.biz_period} дня` : '/день'}</span></div>
+      <div class="small"><span class="price">${fmt(a.price)}</span> · <span class="plus">+${fmt(a.income)}${kind === 'biz' ? ` раз в ${CFG.biz_period} дня` : '/день'}</span>${a.parking ? ` · 🅿️ +${a.parking} ${a.parking === 1 ? 'место' : a.parking < 5 ? 'места' : 'мест'} в гараже` : ''}</div>
       <div class="small muted">Окупится за ~${Math.ceil(a.price / a.income * (kind === 'biz' ? CFG.biz_period : 1))} дн. · доходность ${(a.income / a.price * 100 / (kind === 'biz' ? CFG.biz_period : 1)).toFixed(2).replace('.', ',')} % в день</div>
       <div class="qty"><span class="small muted">Кол-во</span><input class="inp" id="q_${id}" type="number" inputmode="numeric" min="1" value="1">
         <div class="chips" style="margin:0"><button onclick="$('q_${id}').value=Math.max(1,Math.floor(S.money/${a.price}))">Макс ${Math.floor(Math.max(S.money, 0) / a.price)}</button></div></div>
@@ -1022,7 +1022,7 @@ let carCount = 1, catalogOpen = false;
 function vSalon() {
   let h = `<div class="card small muted">🚘 Автосалон закрыт — все машины теперь только из кейсов. В каждом кейсе машины своего класса, шанс ${pct(0.07)} на машину классом выше и редкий шанс на <b style="color:var(--c-legend)">эксклюзив</b> (Ишак, БелАЗ, Maybach…).</div>`;
   h += `<div class="card"><div class="row"><b>Открывать за раз</b><div class="chips" style="margin:0">${[1, 3, 5, 10].map(n => `<button class="${carCount === n ? 'on' : ''}" onclick="carCount=${n};render()">×${n}</button>`).join('')}</div></div>
-    <div class="small muted" style="margin-top:6px">Свободно мест в гараже: ${CFG.max_cars - S.cars.length} из ${CFG.max_cars}</div></div>` + fastRow();
+    <div class="small muted" style="margin-top:6px">🅿️ Свободно мест в гараже: <b style="color:var(--text)">${Math.max(0, S.garage_cap - S.cars.length)}</b> из ${S.garage_cap}. Больше мест — покупай недвижимость.</div></div>` + fastRow();
   h += Object.entries(CFG.car_cases).map(([id, cc]) => {
     const isEx = cc.cls === 'Эксклюзив';
     const list = Object.entries(cc.drops).filter(([m]) => isEx || !CFG.cars[m].rare).sort((a, b) => b[1] - a[1]);
@@ -1149,7 +1149,10 @@ function vGarage() {
   if (!S.cars.length) return `<div class="card empty"><div class="e">🅿️</div>Гараж пуст.<br>Открой автокейс!
     <div class="btns"><button class="btn" onclick="setSub('auto','salon')">🎰 К автокейсам</button></div></div>`;
   const shown = S.cars.find(c => c.id === S.show_car);
-  return `<div class="card small muted">⭐ В топе игроков: <b style="color:var(--text)">${shown ? esc(CFG.cars[shown.model].name) + (shown.plate ? ' · ' + shown.plate : ' · без номера') : 'самая дорогая машина (по умолчанию)'}</b>. Выбери машину кнопкой «Показывать в топе» — рядом будет её номер.</div>` + S.cars.map(car => {
+  return `<div class="card"><div class="row"><b>🅿️ Места в гараже</b><b>${S.cars.length} / ${S.garage_cap}</b></div>
+    <div class="progress"><i style="width:${Math.min(100, S.cars.length / S.garage_cap * 100)}%"></i></div>
+    <div class="small muted" style="margin-top:6px">${CFG.base_parking} место во дворе + места от недвижимости: комната 1, квартира 2, дом 4, бизнес-центр 10. Номеров можно хранить по ${CFG.plates_per_car} на каждую машину: сейчас ${S.plates.length} / ${S.plate_cap}.</div></div>
+  <div class="card small muted">⭐ В топе игроков: <b style="color:var(--text)">${shown ? esc(CFG.cars[shown.model].name) + (shown.plate ? ' · ' + shown.plate : ' · без номера') : 'самая дорогая машина (по умолчанию)'}</b>. Выбери машину кнопкой «Показывать в топе» — рядом будет её номер.</div>` + S.cars.map(car => {
     const c = CFG.cars[car.model];
     return `<div class="card"><div class="car-title">${esc(c.name)}</div>${carBadges(c)}
       ${carStage(car.model, carGlow(car.model))}
@@ -1339,7 +1342,7 @@ async function answerRace(id, accept, car) {
 
 // ================= НОМЕРА =================
 function vPlates() {
-  let h = seg('plates', [['cases', '🎰 Кейсы'], ['mine', `🔢 Мои (${S.plates.length})`], ['auction', '🔨 Аукцион']]);
+  let h = seg('plates', [['cases', '🎰 Кейсы'], ['mine', `🔢 Мои (${S.plates.length}/${S.plate_cap})`], ['auction', '🔨 Аукцион']]);
   return h + ({ cases: vCases, mine: vMine, auction: vAuction })[sub.plates]();
 }
 function chancesBar(ch) {
@@ -1347,7 +1350,7 @@ function chancesBar(ch) {
     <div class="leg">${Object.entries(ch).map(([t, v]) => `<span><span class="dot" style="background:${tierColor(t)}"></span>${CFG.rarity[t].name} ${String(v).replace('.', ',')}%</span>`).join('')}</div>`;
 }
 function vCases() {
-  let h = fastRow() + `<div class="card"><div class="row"><b>Открывать за раз</b><div class="chips" style="margin:0">${[1, 5, 10].map(n => `<button class="${caseCount === n ? 'on' : ''}" onclick="caseCount=${n};render()">×${n}</button>`).join('')}</div></div></div>`;
+  let h = `<div class="card small muted">🔢 Мест для номеров: <b style="color:var(--text)">${S.plates.length} / ${S.plate_cap}</b> — по ${CFG.plates_per_car} на каждую машину в гараже.</div>` + fastRow() + `<div class="card"><div class="row"><b>Открывать за раз</b><div class="chips" style="margin:0">${[1, 5, 10].map(n => `<button class="${caseCount === n ? 'on' : ''}" onclick="caseCount=${n};render()">×${n}</button>`).join('')}</div></div></div>`;
   const free = S.free_cases.std || 0;
   if (free) h += `<div class="card" style="outline:2px solid var(--green)"><div class="row"><h3>🎁 Бесплатный кейс</h3><span class="pill g">×${free}</span></div>
     <div class="small muted">Награда за неделю бонусов подряд</div><div class="btns"><button class="btn" onclick="spin('std',true)">Открыть бесплатно</button></div></div>`;
