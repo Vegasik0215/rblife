@@ -364,7 +364,8 @@ function plateSrc(num, style) {
   return PLATE_CACHE[key] = c.toDataURL('image/png');
 }
 const plateImg = (num, cls = '', style) => `<img class="plate ${cls}" src="${plateSrc(num, style)}" alt="${num}" loading="lazy">`;
-const carSrc = m => `cars/${m}.webp`;
+const IMG_V = '8';   // меняй цифру при обновлении фото — обходит кэш Telegram
+const carSrc = m => `cars/${m}.webp?v=${IMG_V}`;
 // нет фото машины — показываем название
 document.addEventListener('error', e => {
   const t = e.target;
