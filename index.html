@@ -206,6 +206,13 @@ input.inp{width:100%;background:var(--card2);border:1px solid var(--line);color:
 .sw::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s}
 .sw.on{background:var(--green)}.sw.on::after{left:23px}
 .multi{display:grid;gap:8px}
+.multi .mi.selable{cursor:pointer;position:relative}
+.multi .mi .ck{flex:none;width:24px;height:24px;border-radius:7px;border:2px solid var(--line);display:grid;place-items:center;font-size:14px}
+.multi .mi.sel{outline:2px solid var(--red);background:#2a1a1f}
+.multi .mi.sel .ck{background:var(--red);border-color:var(--red)}
+.multi .mi.sold{opacity:.35;pointer-events:none}
+.qty{display:flex;gap:6px;align-items:center;margin-top:10px}
+.qty .inp{width:96px;flex:none;padding:8px 10px}
 .multi .mi{display:flex;align-items:center;gap:10px;background:var(--card2);border-radius:10px;padding:8px;border-left:4px solid var(--c)}
 .multi .mi .mp{flex:1;font-size:14px}
 .chips button{background:var(--card2);padding:7px 10px;border-radius:9px;font-size:13px;font-weight:700}
@@ -293,10 +300,43 @@ const tierColor = t => `var(--c-${t})`;
 // номер РБ рисуем прямо на телефоне (canvas) — сервер для картинок не нужен
 const PLATE_CACHE = {};
 const STYLE_BG = { std: '#fafaf8', taxi: '#f7c91e', eco: '#78c878' };
+const isRu = n => /^[А-Я]\d{3}[А-Я]{2} \d{2,3}$/.test(n);
+const regionOf = n => isRu(n) ? (CFG.ru_regions[n.split(' ')[1]] || 'Россия') + ', ' + n.split(' ')[1] + ' регион' : CFG.regions[+n.slice(-1)];
+function plateRu(num, style) {
+  const W = 1040, H = 224, ox = 10, oy = 10, RW = 250;
+  const c = document.createElement('canvas'); c.width = W + 20; c.height = H + 20;
+  const x = c.getContext('2d');
+  const rr = (X, Y, w, h, r) => { x.beginPath(); x.moveTo(X + r, Y); x.arcTo(X + w, Y, X + w, Y + h, r); x.arcTo(X + w, Y + h, X, Y + h, r); x.arcTo(X, Y + h, X, Y, r); x.arcTo(X, Y, X + w, Y, r); x.closePath(); };
+  rr(ox, oy, W, H, 22); x.fillStyle = STYLE_BG[style] || STYLE_BG.std; x.fill();
+  rr(ox + 8, oy + 8, W - 16, H - 16, 16); x.lineWidth = 7; x.strokeStyle = '#141414'; x.stroke();
+  const sx = ox + W - RW; x.beginPath(); x.moveTo(sx, oy + 10); x.lineTo(sx, oy + H - 10); x.lineWidth = 6; x.stroke();
+  const [main, reg] = num.split(' ');
+  const fam = '"Arial Narrow", "Roboto Condensed", "DejaVu Sans Condensed", "Liberation Sans Narrow", Arial, sans-serif';
+  x.fillStyle = '#0f0f0f'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  // А 777 АА — первая буква и серия чуть меньше цифр
+  const L1 = main[0], D = main.slice(1, 4), L2 = main.slice(4);
+  const big = 200, small = 160, a0 = ox + 30, a1 = sx - 20;
+  x.font = `bold ${small}px ${fam}`; const wl1 = x.measureText(L1).width, wl2 = x.measureText(L2).width;
+  x.font = `bold ${big}px ${fam}`; const wd = x.measureText(D).width;
+  const gap = 18, total = wl1 + wd + wl2 + gap * 2, k = Math.min(1, (a1 - a0) / total), st = a0 + ((a1 - a0) - total * k) / 2;
+  x.save(); x.translate(st, oy + H / 2 + 10); x.scale(k, 1); x.textAlign = 'left';
+  x.font = `bold ${small}px ${fam}`; x.fillText(L1, 0, 12);
+  x.font = `bold ${big}px ${fam}`; x.fillText(D, wl1 + gap, 0);
+  x.font = `bold ${small}px ${fam}`; x.fillText(L2, wl1 + wd + gap * 2, 12);
+  x.restore();
+  let rs = 130; do { x.font = `bold ${rs}px ${fam}`; if (x.measureText(reg).width <= RW - 40) break; rs -= 4; } while (rs > 40);
+  x.fillText(reg, sx + RW / 2, oy + 82);
+  x.font = `bold 40px Arial, sans-serif`; x.fillText('RUS', sx + RW / 2 - 40, oy + 180);
+  const fx = sx + RW / 2 + 20, fy = oy + 162, fw = 66, fh = 40;
+  x.fillStyle = '#fff'; x.fillRect(fx, fy, fw, fh / 3); x.fillStyle = '#1c3fa8'; x.fillRect(fx, fy + fh / 3, fw, fh / 3);
+  x.fillStyle = '#d52b1e'; x.fillRect(fx, fy + fh * 2 / 3, fw, fh / 3); x.strokeStyle = '#3c3c3c'; x.lineWidth = 1; x.strokeRect(fx, fy, fw, fh);
+  return c.toDataURL('image/png');
+}
 function plateSrc(num, style) {
   style = style || 'std';
   const key = num + '|' + style;
   if (PLATE_CACHE[key]) return PLATE_CACHE[key];
+  if (isRu(num)) return PLATE_CACHE[key] = plateRu(num, style);
   const W = 1040, H = 224, ox = 10, oy = 10;
   const c = document.createElement('canvas'); c.width = W + 20; c.height = H + 20;
   const x = c.getContext('2d');
@@ -333,7 +373,7 @@ document.addEventListener('error', e => {
   const m = t.src.split('/cars/')[1].split('.')[0], name = CFG && CFG.cars[m] ? CFG.cars[m].name : '';
   t.src = 'data:image/svg+xml;utf8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="600" height="300"><text x="300" y="165" font-size="46" font-family="sans-serif" font-weight="700" fill="#c9ced8" text-anchor="middle">${name}</text></svg>`);
 }, true);
-const CLS_COLORS = { 'Эконом': '#5b6472', 'Комфорт': '#2f9e5b', 'Бизнес': '#2f6fd6', 'Спорт': '#e0603a', 'Премиум': '#8b46e0', 'Люкс': '#e2475e', 'Редкая': '#b26bff', 'Легенда': '#d4a017' };
+const CLS_COLORS = { 'Эконом': '#5b6472', 'Комфорт': '#2f9e5b', 'Бизнес': '#2f6fd6', 'Спорт': '#e0603a', 'Премиум': '#8b46e0', 'Люкс': '#e2475e', 'Суперкар': '#d9480f', 'Гиперкар': '#c2185b', 'Эксклюзив': '#d4a017', 'Редкая': '#b26bff', 'Легенда': '#d4a017' };
 const mmss = s => { s = Math.max(0, s | 0); return `${String(s / 60 | 0).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; };
 const pct = x => (x * 100).toFixed(x * 100 % 1 ? 1 : 0) + ' %';
 
@@ -494,7 +534,7 @@ function vProfile() {
     <div class="row"><span>🎓 Образование</span><b>${CFG.edu_names[S.edu]}</b></div>
     <div class="row"><span>💼 Работа</span><b>${job ? job.icon + ' ' + job.name : 'нет'}</b></div>
     <div class="row"><span>⭐ Опыт</span><b>${S.exp}</b></div>
-    <div class="row"><span>💵 Пассивный доход</span><b class="plus">+${fmt(S.passive)}/день</b></div>
+    <div class="row"><span>💵 Пассивный доход (в среднем)</span><b class="plus">+${fmt(S.passive)}/день</b></div>
     <div class="row"><span>🧾 Расходы и платежи</span><b class="minus">−${fmt(S.expenses)}/день</b></div>
     ${S.daily_tax ? `<div class="row"><span>🏛 Налоги</span><b class="minus">−${fmt(S.daily_tax)}/день</b></div>` : ''}
     ${S.set_bonus ? `<div class="row"><span>💎 Бонус коллекций</span><b class="plus">+${pct(S.set_bonus)}</b></div>` : ''}
@@ -626,24 +666,27 @@ async function moveCity(id) { const c = CFG.cities[id]; if (await ask(`Пере�
 
 // ================= ФИНАНСЫ =================
 function vMoney() {
-  let h = seg('money', [['biz', '🏪 Бизнес'], ['prop', '🏠 Жильё'], ['bank', '🏦 Банк'], ['tax', `🏛 Налоговая${S.tax_due > 0 ? ' •' : ''}`], ['stocks', '📈 Биржа'], ['casino', '🎲 Казино']]);
-  return h + ({ biz: vAssets, prop: vAssets, bank: vBank, tax: vTax, stocks: vStocks, casino: vCasino })[sub.money]();
+  let h = seg('money', [['biz', '🏪 Бизнес'], ['prop', '🏠 Жильё'], ['bank', '🏦 Банк'], ['tax', `🏛 Налоговая${S.tax_due > 0 ? ' •' : ''}`], ['stocks', '📈 Биржа'], ['casino', '🎲 Казино'], ['lux', '💎 Роскошь']]);
+  return h + ({ biz: vAssets, prop: vAssets, bank: vBank, tax: vTax, stocks: vStocks, casino: vCasino, lux: vLux })[sub.money]();
 }
 function vAssets() {
   const kind = sub.money;
   let h = `<div class="card small muted">${kind === 'biz'
-    ? `Бизнес приносит доход каждый день (±15 %), доход зависит от города. Налог ${pct(CFG.taxes.biz)} начисляется в «Налоговой».`
+    ? `Бизнес приносит доход раз в ${CFG.biz_period} дня (±15 %), доход зависит от города. Чем дороже бизнес — тем быстрее окупается. Налог ${pct(CFG.taxes.biz)} начисляется в «Налоговой».${Object.keys(S.biz).length ? ` <b style="color:var(--text)">Следующая выплата через ${S.biz_in} дн.: ~${fmt(S.biz_payout)}</b>` : ''}`
     : `Недвижимость сдаётся в аренду. Есть хоть один объект — не платишь за жильё. Можно купить в ипотеку: взнос ${pct(CFG.loans.down)}.`}
     Продать можно за ${pct(CFG.sell_rate)} цены.</div>`;
   h += Object.entries(CFG[kind]).map(([id, a]) => {
     const n = S[kind][id] || 0;
     return `<div class="card item"><div class="big-ic">${a.icon}</div><div class="body">
       <div class="row"><b>${a.name}</b>${n ? `<span class="badge">у тебя: ${n}</span>` : ''}</div>
-      <div class="small"><span class="price">${fmt(a.price)}</span> · <span class="plus">+${fmt(a.income)}/день</span></div>
-      <div class="small muted">Окупится за ~${Math.ceil(a.price / a.income)} дн.</div>
-      <div class="btns"><button class="btn ${S.money < a.price ? 'sec' : ''}" onclick="act('buy_asset',{kind:'${kind}',id:'${id}'})">Купить</button>
-        ${kind === 'prop' ? `<button class="btn sec" onclick="mortgage('${id}')">🏦 Ипотека</button>` : ''}
-        ${n ? `<button class="btn red" onclick="sellAsset('${kind}','${id}')">Продать</button>` : ''}</div>
+      <div class="small"><span class="price">${fmt(a.price)}</span> · <span class="plus">+${fmt(a.income)}${kind === 'biz' ? ` раз в ${CFG.biz_period} дня` : '/день'}</span></div>
+      <div class="small muted">Окупится за ~${Math.ceil(a.price / a.income * (kind === 'biz' ? CFG.biz_period : 1))} дн. · доходность ${(a.income / a.price * 100 / (kind === 'biz' ? CFG.biz_period : 1)).toFixed(2).replace('.', ',')} % в день</div>
+      <div class="qty"><span class="small muted">Кол-во</span><input class="inp" id="q_${id}" type="number" inputmode="numeric" min="1" value="1">
+        <div class="chips" style="margin:0"><button onclick="$('q_${id}').value=Math.max(1,Math.floor(S.money/${a.price}))">Макс ${Math.floor(Math.max(S.money, 0) / a.price)}</button></div></div>
+      <div class="btns"><button class="btn ${S.money < a.price ? 'sec' : ''}" onclick="buyQty('${kind}','${id}')">Купить</button>
+        <button class="btn sec" onclick="buyMax('${kind}','${id}')">Купить на все</button>
+        ${kind === 'prop' ? `<button class="btn sec" onclick="mortgage('${id}')">🏦 Ипотека</button>` : ''}</div>
+      ${n ? `<div class="btns"><button class="btn red" onclick="sellAsset('${kind}','${id}')">Продать</button>${n > 1 ? `<button class="btn red" onclick="sellAsset('${kind}','${id}','all')">Продать все ${n}</button>` : ''}</div>` : ''}
     </div></div>`;
   }).join('');
   return h;
@@ -654,8 +697,37 @@ async function mortgage(id) {
   if (await ask(`Ипотека на «${a.name}»: взнос ${fmt(down)}, потом ${fmt(pay)}/день ${days} дней (переплата ${pct(rate)}). ${CFG.loans.missed} пропуска подряд — банк заберёт жильё.`))
     act('buy_asset', { kind: 'prop', id, credit: true });
 }
-async function sellAsset(kind, id) { const a = CFG[kind][id]; if (await ask(`Продать «${a.name}» за ${fmt(a.price * CFG.sell_rate)}?`)) act('sell_asset', { kind, id }); }
+async function sellAsset(kind, id, all) {
+  const a = CFG[kind][id], have = S[kind][id] || 0;
+  const n = all ? have : Math.min(have, Math.max(1, num('q_' + id) || 1));
+  if (await ask(`Продать «${a.name}» ×${n} за ${fmt(a.price * CFG.sell_rate * n)}?`)) act('sell_asset', { kind, id, count: all ? 'all' : n });
+}
+async function buyQty(kind, id) {
+  const a = CFG[kind][id], n = num('q_' + id);
+  if (!n || n < 1) return toast('Введи количество', true);
+  if (n > 1 && !await ask(`Купить «${a.name}» ×${n} за ${fmt(a.price * n)}?`)) return;
+  act('buy_asset', { kind, id, count: n });
+}
+async function buyMax(kind, id) {
+  const a = CFG[kind][id], n = Math.floor(Math.max(S.money, 0) / a.price);
+  if (n < 1) return toast(`💸 Нужно ${fmt(a.price)}`, true);
+  if (await ask(`Купить «${a.name}» на все деньги: ×${n} за ${fmt(a.price * n)}?`)) act('buy_asset', { kind, id, count: 'max' });
+}
 
+function vLux() {
+  let h = `<div class="card small muted">Покупки для статуса: дохода не приносят, зато каждый день поднимают настроение и показываются в топе и профиле. Продать можно только за ${pct(CFG.lux_resale)} цены.</div>`;
+  h += Object.entries(CFG.luxury).map(([id, l]) => {
+    const own = S.lux && S.lux[id];
+    return `<div class="card item"><div class="big-ic">${l.icon}</div><div class="body">
+      <div class="row"><b>${l.name}</b>${own ? '<span class="pill g">твоё</span>' : ''}</div>
+      <div class="small"><span class="price">${fmt(l.price)}</span> · 😊 +${l.mood} в день</div>
+      <div class="btns">${own ? `<button class="btn red" onclick="sellLux('${id}')">Продать · ${fmt(l.price * CFG.lux_resale)}</button>`
+        : `<button class="btn ${S.money < l.price ? 'sec' : ''}" onclick="buyLux('${id}')">Купить</button>`}</div></div></div>`;
+  }).join('');
+  return h;
+}
+async function buyLux(id) { const l = CFG.luxury[id]; if (await ask(`Купить «${l.name}» за ${fmt(l.price)}?`)) act('buy_lux', { id }); }
+async function sellLux(id) { const l = CFG.luxury[id]; if (await ask(`Продать «${l.name}» за ${fmt(l.price * CFG.lux_resale)}? Потеряешь ${pct(1 - CFG.lux_resale)}.`)) act('sell_lux', { id }); }
 function vTax() {
   const T = CFG.taxes, late = S.tax_overdue;
   let h = `<div class="card"><div class="muted small">Долг перед налоговой</div><div class="money ${S.tax_due > 0 ? 'neg' : ''}">${fmt(S.tax_due)}</div>
@@ -686,7 +758,7 @@ async function doBribe() {
 function vBank() {
   const [cd, cr] = CFG.loans.cash;
   let h = `<div class="card"><div class="muted small">На вкладе</div><div class="money">${fmt(S.deposit)}</div>
-    <div class="small muted">${(CFG.deposit_rate * 100).toFixed(1)} % в день · завтра +${fmt(S.deposit * CFG.deposit_rate)}</div>
+    <div class="small muted">${(CFG.deposit_rate * 100).toFixed(1)} % в день · каждый новый день вклад вырастет на <b class="plus">+${fmt(Math.round(S.deposit * CFG.deposit_rate))}</b> (проценты остаются на вкладе)</div>
     <input class="inp" id="bankAmt" type="number" inputmode="numeric" placeholder="Сумма, $" style="margin-top:12px">
     <div class="btns"><button class="btn" onclick="bankOp('dep')">➕ Положить</button><button class="btn sec" onclick="bankOp('wd')">➖ Снять</button></div>
     <div class="btns"><button class="btn ghost" onclick="act('bank',{op:'dep',amount:'all'})">Положить всё</button><button class="btn ghost" onclick="act('bank',{op:'wd',amount:'all'})">Снять всё</button></div></div>`;
@@ -748,7 +820,7 @@ const GAMES = [['roulette', '🎡 Рулетка'], ['slots', '🎰 Слоты']
 const betInp = (id, ph = 'Ставка, $') => `<input class="inp" id="${id}" type="number" inputmode="numeric" placeholder="${ph}" style="margin-top:8px" value="${lsGet('bet_' + id, '')}">
   <div class="chips">${[['½', 'half'], ['×2', 'dbl'], ['Макс', 'max'], ['Всё', 'all']].map(([t, k]) => `<button onclick="betMod('${id}','${k}')">${t}</button>`).join('')}</div>`;
 function betMod(id, k) {
-  const e = $(id), v = parseInt(e.value, 10) || 0, cap = Math.min(CFG.max_bet, Math.max(0, Math.floor(S.money)));
+  const e = $(id), v = parseInt(e.value, 10) || 0, cap = Math.min(S.max_bet || CFG.max_bet, Math.max(0, Math.floor(S.money)));
   e.value = Math.max(1, Math.min(cap, k === 'half' ? Math.floor(v / 2) : k === 'dbl' ? v * 2 : cap)) || '';
 }
 function getBet(id) { const v = num(id); if (!v || v <= 0) { toast('Введи ставку', true); return 0; } lsSet('bet_' + id, v); return v; }
@@ -760,7 +832,7 @@ async function casinoCall(action, params) {
 const winLine = (w, bet) => w > 0 ? `<b class="plus">Выигрыш ${fmt(w)}${bet ? ` (×${(w / bet).toFixed(2).replace(/\.?0+$/, '')})` : ''}!</b>` : 'Не повезло…';
 function vCasino() {
   const g = `<div class="games">${GAMES.map(([k, t]) => `<button class="${game === k ? 'on' : ''}" onclick="game='${k}';render()">${t}</button>`).join('')}</div>`;
-  const head = `<div class="card small muted">Казино всегда в плюсе на дистанции. Максимальная ставка ${fmt(CFG.max_bet)}. Твой итог: <b class="${(S.stats.casino || 0) >= 0 ? 'plus' : 'minus'}">${fmt(S.stats.casino || 0)}</b></div>`;
+  const head = `<div class="card small muted">Казино всегда в плюсе на дистанции. Максимальная ставка ${fmt(S.max_bet)}${S.max_bet > CFG.max_bet ? ' 👑 VIP-зал' : ` (VIP-зал до ${fmt(CFG.vip_bet)} — с капиталом от ${fmt(CFG.vip_from)})`}. Твой итог: <b class="${(S.stats.casino || 0) >= 0 ? 'plus' : 'minus'}">${fmt(S.stats.casino || 0)}</b></div>`;
   return head + g + ({ roulette: gRoulette, slots: gSlots, crash: gCrash, mines: gMines, dice: gDice, coin: gCoin, wheel: gWheel })[game]();
 }
 function gRoulette() {
@@ -942,22 +1014,34 @@ async function playWheel(free) {
 
 // ================= АВТО =================
 function vAuto() {
-  let h = seg('auto', [['salon', '🚘 Салон'], ['garage', `🅿️ Гараж (${S.cars.length})`], ['tuning', `🔧 Тюнинг (${S.parts.length})`], ['races', '🏁 Гонки'], ['sets', '💎 Коллекции']]);
+  let h = seg('auto', [['salon', '🎰 Автокейсы'], ['garage', `🅿️ Гараж (${S.cars.length})`], ['tuning', `🔧 Тюнинг (${S.parts.length})`], ['races', '🏁 Гонки'], ['sets', '💎 Коллекции']]);
   return h + ({ salon: vSalon, garage: vGarage, tuning: vTuning, races: vRaces, sets: vSets })[sub.auto]();
 }
+let carCount = 1, catalogOpen = false;
 function vSalon() {
-  const cc = CFG.car_case, total = Object.values(cc.drops).reduce((a, b) => a + b, 0);
-  const rare = Object.entries(cc.drops).filter(([m]) => CFG.cars[m].rare);
-  let h = `<div class="card" style="background:linear-gradient(135deg,#2a1f48,#181b22)"><div class="row"><h3>${cc.name}</h3><span class="price">${fmt(cc.price)}</span></div>
-    <div class="small muted">Случайная машина. Только здесь выпадают редкие: ${rare.map(([m, w]) => `<b style="color:var(--c-epic)">${CFG.cars[m].name}</b> ${(w / total * 100).toFixed(2)} %`).join(', ')}</div>
-    <div class="btns"><button class="btn ${S.money < cc.price ? 'sec' : ''}" onclick="openCarCase()">Открыть автокейс</button></div></div>` + fastRow();
-  h += CFG.salon.map(id => {
+  let h = `<div class="card small muted">🚘 Автосалон закрыт — все машины теперь только из кейсов. В каждом кейсе машины своего класса, шанс ${pct(0.07)} на машину классом выше и редкий шанс на <b style="color:var(--c-legend)">эксклюзив</b> (Ишак, БелАЗ, Maybach…).</div>`;
+  h += `<div class="card"><div class="row"><b>Открывать за раз</b><div class="chips" style="margin:0">${[1, 3, 5, 10].map(n => `<button class="${carCount === n ? 'on' : ''}" onclick="carCount=${n};render()">×${n}</button>`).join('')}</div></div>
+    <div class="small muted" style="margin-top:6px">Свободно мест в гараже: ${CFG.max_cars - S.cars.length} из ${CFG.max_cars}</div></div>` + fastRow();
+  h += Object.entries(CFG.car_cases).map(([id, cc]) => {
+    const isEx = cc.cls === 'Эксклюзив';
+    const list = Object.entries(cc.drops).filter(([m]) => isEx || !CFG.cars[m].rare).sort((a, b) => b[1] - a[1]);
+    const own = isEx ? list : list.filter(([m]) => CFG.cars[m].cls === cc.cls), up = isEx ? [] : list.filter(([m]) => CFG.cars[m].cls !== cc.cls);
+    const ex = isEx ? 0 : Object.entries(cc.drops).filter(([m]) => CFG.cars[m].rare).reduce((a, [, w]) => a + w, 0);
+    const best = own.reduce((a, [m]) => CFG.cars[m].price > CFG.cars[a].price ? m : a, own[0][0]);
+    return `<div class="card" style="border-left:4px solid ${CLS_COLORS[cc.cls]}${isEx ? ';background:linear-gradient(135deg,#3a2c08,#181b22)' : ''}">
+      <div class="row"><h3>${cc.name}</h3><span class="price">${fmt(cc.price)}</span></div>
+      ${carStage(best)}
+      <div class="small" style="line-height:1.7">${own.map(([m, w]) => `${esc(CFG.cars[m].name)} <span class="muted">${w.toFixed(1).replace('.', ',')} %</span>`).join(' · ')}</div>
+      ${isEx ? `<div class="small muted" style="margin-top:4px">Только эксклюзивы — гарантированно!</div>` : `<div class="small muted" style="margin-top:4px">${up.length ? `⬆️ Класс выше: ${up.reduce((a, [, w]) => a + w, 0).toFixed(0)} % · ` : ''}⭐ Эксклюзив: ${ex.toFixed(2).replace('.', ',')} %</div>`}
+      <div class="btns"><button class="btn ${S.money < cc.price * carCount ? 'sec' : ''}" onclick="openCarCase('${id}',carCount)">Открыть${carCount > 1 ? ` ×${carCount} · ${fmt(cc.price * carCount)}` : ''}</button></div></div>`;
+  }).join('');
+  h += `<div class="card" onclick="catalogOpen=!catalogOpen;render()"><div class="row"><h3>📖 Все машины игры (${CFG.car_order.length})</h3><span>${catalogOpen ? '▲' : '▼'}</span></div></div>`;
+  if (catalogOpen) h += CFG.car_order.map(id => {
     const c = CFG.cars[id], owned = S.cars.filter(x => x.model === id).length;
-    return `<div class="card"><div class="car-title">${esc(c.name)}</div>${carBadges(c)}${carStage(id)}
+    return `<div class="card"><div class="car-title">${esc(c.name)}</div>${carBadges(c)}${carStage(id, carGlow(id))}
       <div class="tiles"><div class="tile"><b>${c.hp}</b><span>л.с.</span></div><div class="tile"><b>${fmt(c.price)}</b><span>цена</span></div><div class="tile"><b>${fmt(c.upkeep)}</b><span>в день</span></div></div>
-      <div class="small muted" style="text-align:center;margin-top:8px">😊 +${c.mood} к настроению · такси ×${CFG.taxi_mult[c.cls]}${owned ? ` · 🅿️ у тебя: ${owned}` : ''}</div>
-      <div class="btns"><button class="btn ${S.money < c.price ? 'sec' : ''}" onclick="buyCar('${id}')">Купить</button><button class="btn sec" onclick="carCredit('${id}')">🏦 В кредит</button></div></div>`;
-  }).join('') + `<div class="small muted" style="text-align:center">Фото: Wikimedia Commons</div>`;
+      <div class="small muted" style="text-align:center;margin-top:8px">😊 +${c.mood} к настроению · такси ×${CFG.taxi_mult[c.cls]}${owned ? ` · 🅿️ у тебя: ${owned}` : ''}</div></div>`;
+  }).join('');
   return h;
 }
 async function buyCar(id) {
@@ -973,16 +1057,17 @@ async function carCredit(id) {
   }
 }
 async function quickSellCar(id) { const r = await act('sell_car', { car: id }); if (r) closeSheet(); }
-async function openCarCase() {
-  const cc = CFG.car_case;
-  if (S.money < cc.price) { haptic('error'); return toast(`💸 Нужно ${fmt(cc.price)}`, true); }
-  let res; try { res = await api('/api/action', { action: 'car_case' }); } catch (e) { return toast('Нет связи', true); }
+async function openCarCase(caseId, count = 1) {
+  const cc = CFG.car_cases[caseId];
+  if (S.money < cc.price * count) { haptic('error'); return toast(`💸 Нужно ${fmt(cc.price * count)}`, true); }
+  let res; try { res = await api('/api/action', { action: 'car_case', case: caseId, count }); } catch (e) { return toast('Нет связи', true); }
   if (!res.ok) { haptic('error'); return toast(res.error, true); }
   const models = Object.keys(cc.drops), weights = Object.values(cc.drops);
   const pick = () => { let x = Math.random() * weights.reduce((a, b) => a + b); for (let i = 0; i < models.length; i++) { if ((x -= weights[i]) <= 0) return models[i]; } return models[0]; };
   const W = 150, GAP = 8, N = 40, WIN = 34, items = [];
-  for (let i = 0; i < N; i++) items.push(i === WIN ? res.car_case.model : pick());
-  const col = m => CFG.cars[m].rare ? (CFG.cars[m].cls === 'Легенда' ? 'var(--c-legend)' : 'var(--c-epic)') : CFG.cars[m].price > 100000 ? 'var(--c-rare)' : 'var(--c-common)';
+  const list = res.car_cases || [res.car_case], best = list.reduce((a, b) => CFG.cars[b.model].price > CFG.cars[a.model].price ? b : a);
+  for (let i = 0; i < N; i++) items.push(i === WIN ? best.model : pick());
+  const col = carCol;
   sheetLocked = true;
   openSheet(cc.name, `<div class="reel" id="reel"><div class="marker"></div><div class="strip" id="strip">
     ${items.map(m => `<div class="ri" style="--c:${col(m)};width:${W}px"><img src="${carSrc(m)}" style="width:100%;height:60px;object-fit:contain"><div class="small" style="text-align:center;margin-top:4px">${esc(CFG.cars[m].name)}</div></div>`).join('')}
@@ -993,27 +1078,88 @@ async function openCarCase() {
   void strip.offsetWidth; strip.style.transition = `transform ${D}ms cubic-bezier(.08,.75,.12,1)`; strip.style.transform = `translateX(${-target}px)`;
   setTimeout(() => {
     sheetLocked = false; S = res.state; renderHeader(); render();
-    const m = res.car_case.model, c = CFG.cars[m];
+    const m = best.model, c = CFG.cars[m];
     haptic('success');
-    $('spinOut').outerHTML = `<div class="result"><h2 style="color:${col(m)}">${c.rare ? (c.cls === 'Легенда' ? '🔥 ЛЕГЕНДА! ' : '💜 Редкая! ') : ''}${esc(c.name)}</h2>
-      ${carStage(m, c.rare ? (c.cls === 'Легенда' ? 'legend-glow' : 'rare-glow') : '')}
-      <div class="small muted">${c.hp} л.с. · стоимость ${fmt(c.price)} · уже в гараже</div>
-      <div class="btns"><button class="btn" onclick="openCarCase()">Ещё раз · ${fmt(cc.price)}</button></div>
-      <div class="btns"><button class="btn red" onclick="quickSellCar(${res.car_case.id})">💵 Продать · ${fmt(res.car_case.value)}</button><button class="btn ghost" onclick="closeSheet();goto('auto','garage')">В гараж</button></div></div>`;
+    const head = `<h2 style="color:${col(m)}">${c.rare ? '🔥 ЭКСКЛЮЗИВ! ' : c.cls !== cc.cls && cc.cls !== 'Эксклюзив' ? '⬆️ Класс выше! ' : ''}${esc(c.name)}</h2>
+      ${carStage(m, carGlow(m))}`;
+    const again = `<div class="btns"><button class="btn" onclick="openCarCase('${caseId}',${count})">Ещё ${count > 1 ? '×' + count + ' ' : 'раз '}· ${fmt(cc.price * count)}</button></div>`;
+    if (list.length === 1) {
+      $('spinOut').outerHTML = `<div class="result">${head}<div class="small muted">${c.hp} л.с. · стоимость ${fmt(c.price)} · уже в гараже</div>${again}
+        <div class="btns"><button class="btn red" onclick="quickSellCar(${best.id})">💵 Продать · ${fmt(best.value)}</button><button class="btn ghost" onclick="closeSheet();goto('auto','garage')">В гараж</button></div></div>`;
+      return;
+    }
+    const items2 = list.slice().sort((a, b) => CFG.cars[b.model].price - CFG.cars[a.model].price).map(x => ({ k: 'c' + x.id, ref: x.id, value: x.value, color: col(x.model),
+      html: `<img class="mini-car" src="${carSrc(x.model)}" style="width:70px;height:36px"><div style="flex:1;text-align:left"><b>${esc(CFG.cars[x.model].name)}</b>${x.rare ? ' <span class="pill">эксклюзив</span>' : CFG.cars[x.model].cls !== cc.cls && cc.cls !== 'Эксклюзив' ? ' <span class="pill b">класс выше</span>' : ''}</div>` }));
+    $('spinOut').outerHTML = `<div class="result">${head}${selList('cars', items2)}${again}<div class="btns"><button class="btn ghost" onclick="closeSheet();goto('auto','garage')">В гараж</button></div></div>`;
   }, D + 200);
 }
+// ---- выборочная продажа (номера, машины, детали)
+let SEL = null;
+function selList(kind, items) {   // items: [{k, html, value, color}]
+  SEL = { kind, items: Object.fromEntries(items.map(x => [x.k, x])), chosen: new Set(), sold: new Set() };
+  return `<div class="small muted" style="margin:6px 0">Нажми на предметы, чтобы выбрать, что продать</div>
+    <div class="multi" style="margin:6px 0 10px">${items.map(x => `<div class="mi selable" id="sel_${x.k}" style="--c:${x.color}" onclick="toggleSel('${x.k}')">
+      <div class="ck">✓</div>${x.html}<b style="flex:none">${fmt(x.value)}</b></div>`).join('')}</div>
+    <div class="btns"><button class="btn red" id="selBtn" disabled onclick="sellSel(false)">Выбери, что продать</button></div>
+    <div class="btns"><button class="btn sec" id="selAll" onclick="sellSel(true)">💵 Продать все</button></div>`;
+}
+function selUpdate() {
+  const left = Object.keys(SEL.items).filter(k => !SEL.sold.has(k));
+  const sum = [...SEL.chosen].reduce((a, k) => a + SEL.items[k].value, 0), all = left.reduce((a, k) => a + SEL.items[k].value, 0);
+  const b = $('selBtn'), b2 = $('selAll');
+  if (b) { b.disabled = !SEL.chosen.size; b.textContent = SEL.chosen.size ? `💵 Продать выбранные (${SEL.chosen.size}) · ${fmt(sum)}` : 'Выбери, что продать'; }
+  if (b2) { b2.disabled = !left.length; b2.textContent = left.length ? `💵 Продать все (${left.length}) · ${fmt(all)}` : 'Всё продано'; }
+}
+function toggleSel(k) {
+  if (!SEL || SEL.sold.has(k)) return;
+  SEL.chosen.has(k) ? SEL.chosen.delete(k) : SEL.chosen.add(k);
+  $('sel_' + k).classList.toggle('sel', SEL.chosen.has(k)); haptic('light'); selUpdate();
+}
+async function sellSel(all) {
+  const keys = all ? Object.keys(SEL.items).filter(k => !SEL.sold.has(k)) : [...SEL.chosen];
+  if (!keys.length) return;
+  const raw = keys.map(k => SEL.items[k].ref);
+  const r = SEL.kind === 'plates' ? await act('sell_plates', { nums: raw }) : SEL.kind === 'parts' ? await act('sell_parts', { ids: raw }) : await act('sell_cars', { ids: raw });
+  if (!r) return;
+  keys.forEach(k => { SEL.sold.add(k); SEL.chosen.delete(k); const e = $('sel_' + k); if (e) { e.classList.remove('sel'); e.classList.add('sold'); } });
+  selUpdate();
+}
+const CLS_TIER = { 'Эконом': 'common', 'Комфорт': 'common', 'Бизнес': 'nice', 'Спорт': 'rare', 'Премиум': 'rare', 'Люкс': 'epic', 'Суперкар': 'epic', 'Гиперкар': 'legend', 'Эксклюзив': 'legend' };
+const carCol = m => `var(--c-${CLS_TIER[CFG.cars[m].cls] || 'common'})`;
+const carGlow = m => CFG.cars[m].rare || CFG.cars[m].cls === 'Гиперкар' ? 'legend-glow' : ['Люкс', 'Суперкар'].includes(CFG.cars[m].cls) ? 'rare-glow' : '';
+function swapSheet(cid) {
+  const car = S.cars.find(c => c.id === cid); if (!car) return closeSheet();
+  const c = CFG.cars[car.model];
+  openSheet(`🔥 Свап двигателя · ${c.name}`, `<div class="small muted">Ставишь чужой мотор — мощность машины считается от него (+ тюнинг). Свап не продаётся и не увеличивает стоимость машины. При замене или возврате родного мотора старый свап утилизируется.</div>
+    <div class="logi"><div class="row"><b>Сейчас</b><b>${car.swap ? CFG.swaps[car.swap].icon + ' ' + CFG.swaps[car.swap].name : 'Родной мотор'} · ${car.hp} л.с.</b></div></div>` +
+    Object.entries(CFG.swaps).map(([k, sw]) => `<div class="logi"><div class="row"><b>${sw.icon} ${sw.name}</b><span class="price">${fmt(sw.price)}</span></div>
+      <div class="small muted">${sw.hp} л.с. вместо ${c.hp} · 😊 +${sw.mood} в день</div>
+      <div class="btns"><button class="btn ${car.swap === k || S.money < sw.price ? 'sec' : ''}" ${car.swap === k ? 'disabled' : ''} onclick="doSwap(${cid},'${k}')">${car.swap === k ? 'Установлен' : 'Поставить'}</button></div></div>`).join('') +
+    (car.swap ? `<div class="btns"><button class="btn ghost" onclick="doSwap(${cid},'stock')">Вернуть родной мотор</button></div>` : ''));
+}
+async function doSwap(cid, k) {
+  const car = S.cars.find(c => c.id === cid), name = CFG.cars[car.model].name;
+  const q = k === 'stock' ? `Вернуть родной мотор на ${name}? Свап пропадёт без компенсации.` : `Поставить ${CFG.swaps[k].name} на ${name} за ${fmt(CFG.swaps[k].price)}?${car.swap ? ' Текущий свап пропадёт.' : ''}`;
+  if (!await ask(q)) return;
+  const r = await act('engine_swap', { car: cid, engine: k }); if (r) swapSheet(cid);
+}
+function showInTop(id) { act('show_car', { car: S.show_car === id ? null : id }); }
 function vGarage() {
-  if (!S.cars.length) return `<div class="card empty"><div class="e">🅿️</div>Гараж пуст.<br>Загляни в автосалон!
-    <div class="btns"><button class="btn" onclick="setSub('auto','salon')">🚘 В автосалон</button></div></div>`;
-  return S.cars.map(car => {
+  if (!S.cars.length) return `<div class="card empty"><div class="e">🅿️</div>Гараж пуст.<br>Открой автокейс!
+    <div class="btns"><button class="btn" onclick="setSub('auto','salon')">🎰 К автокейсам</button></div></div>`;
+  const shown = S.cars.find(c => c.id === S.show_car);
+  return `<div class="card small muted">⭐ В топе игроков: <b style="color:var(--text)">${shown ? esc(CFG.cars[shown.model].name) + (shown.plate ? ' · ' + shown.plate : ' · без номера') : 'самая дорогая машина (по умолчанию)'}</b>. Выбери машину кнопкой «Показывать в топе» — рядом будет её номер.</div>` + S.cars.map(car => {
     const c = CFG.cars[car.model];
     return `<div class="card"><div class="car-title">${esc(c.name)}</div>${carBadges(c)}
-      ${carStage(car.model, c.rare ? (c.cls === 'Легенда' ? 'legend-glow' : 'rare-glow') : '')}
+      ${carStage(car.model, carGlow(car.model))}
       ${car.plate ? `<div class="car-plate">${plateImg(car.plate, 'sm', car.plate_style)}</div>` : ''}
       ${car.on_loan ? `<div style="text-align:center;margin-bottom:8px"><span class="pill r">в кредите</span></div>` : ''}
+      ${car.swap ? `<div style="text-align:center;margin-bottom:8px"><span class="pill">🔥 SWAP: ${CFG.swaps[car.swap].name}</span></div>` : ''}
       <div class="tiles"><div class="tile"><b>${car.hp}</b><span>л.с.</span></div><div class="tile"><b>${fmt(car.value)}</b><span>стоимость</span></div><div class="tile"><b>+${car.mood_bonus}</b><span>😊 в день</span></div></div>
       <div class="menu">
         <button onclick="pickPlate(${car.id})"><span class="ic">🔢</span><span class="t">Номер</span><span class="r">${car.plate ? `<b class="t-${car.plate_tier}">${car.plate}</b>` : 'Нет'}</span></button>
+        <button onclick="showInTop(${car.id})"><span class="ic">⭐</span><span class="t">Показывать в топе</span><span class="r">${S.show_car === car.id ? '<b class="plus">✔ выбрана</b>' : ''}</span></button>
+        <button onclick="swapSheet(${car.id})"><span class="ic">🔥</span><span class="t">Свап двигателя</span><span class="r">${car.swap ? CFG.swaps[car.swap].icon + ' ' + CFG.swaps[car.swap].name : 'родной'}</span></button>
         <button onclick="tuneSheet(${car.id})"><span class="ic">🔧</span><span class="t">Тюнинг</span><span class="r">${Object.keys(car.tune).length}/${Object.keys(CFG.tuning).length} деталей</span></button>
         <button onclick="raceFrom(${car.id})"><span class="ic">🏁</span><span class="t">Вызвать на гонку</span><span class="r"></span></button>
         ${car.on_loan ? '' : `<button onclick="sellLot('car',${car.id})"><span class="ic">🏷</span><span class="t">Выставить на рынок</span><span class="r"></span></button>`}
@@ -1061,10 +1207,18 @@ function vTuning() {
     h += `<div class="small muted" style="margin-bottom:8px">Ставь детали на машину: Гараж → 🔧 Тюнинг.</div><div class="multi">` + list.map(p => `<div class="mi" style="--c:${PCOL[p.tier]}">
       <div style="flex:1"><b>${partName(p)}</b><div>${tierTag(p.tier)} <span class="small muted">${partFx(p.slot, p.tier)}</span></div></div>
       <button class="btn red" style="flex:none;padding:6px 10px" onclick="act('sell_parts',{ids:[${p.id}]})">${fmt(CFG.part_tiers[p.tier].value)}</button></div>`).join('') + `</div>`;
-    if (junk.length) h += `<div class="btns"><button class="btn sec" onclick="act('sell_parts',{ids:[${junk.map(p => p.id)}]})">Продать ржавые (${junk.length}) · ${fmt(junk.length * CFG.part_tiers.junk.value)}</button></div>`;
+    h += `<div class="small muted" style="margin-top:12px">Продать по категориям:</div><div class="btns">` + CFG.part_order.map(t => {
+      const g = S.parts.filter(p => p.tier === t); if (!g.length) return '';
+      return `<button class="btn sec" style="flex:1 0 45%;border-left:4px solid ${PCOL[t]}" onclick="sellTier('${t}')">${CFG.part_tiers[t].emoji} ${CFG.part_tiers[t].name} (${g.length}) · ${fmt(g.length * CFG.part_tiers[t].value)}</button>`;
+    }).join('') + `</div>`;
   }
   h += `</div><div class="card"><h3>Детали</h3><div class="list">` + Object.entries(CFG.tuning).map(([k, t]) => `<div class="row"><span>${t.icon} ${t.name}</span><span class="small muted">${[t.hp ? `до +${Math.round(t.hp * 6 * 100)} % л.с.` : '', t.mood ? `до +${t.mood * 6} 😊` : ''].filter(Boolean).join(' · ')}</span></div>`).join('') + `</div></div>`;
   return h;
+}
+async function sellTier(t) {
+  const g = S.parts.filter(p => p.tier === t);
+  if (!g.length) return;
+  if (await ask(`Продать все детали «${CFG.part_tiers[t].name}» (${g.length} шт.) за ${fmt(g.length * CFG.part_tiers[t].value)}?`)) act('sell_parts', { ids: g.map(p => p.id) });
 }
 async function openParts(id, count) {
   const c = CFG.part_cases[id];
@@ -1086,13 +1240,11 @@ async function openParts(id, count) {
     sheetLocked = false; S = res.state; renderHeader(); render();
     haptic(order.indexOf(best.tier) >= 3 ? 'success' : 'light');
     const title = best.tier === 'legend' ? '🔥 ЛЕГЕНДАРНАЯ ДЕТАЛЬ!' : best.tier === 'epic' ? '💜 Гоночная деталь!' : `${CFG.part_tiers[best.tier].emoji} ${CFG.part_tiers[best.tier].name} деталь`;
-    const total = list.reduce((a, x) => a + CFG.part_tiers[x.tier].value, 0), ids = list.map(x => x.id);
-    $('spinOut').outerHTML = `<div class="result"><h2 style="color:${PCOL[best.tier]}">${title}</h2>
-      <div class="multi" style="margin:10px 0">${list.slice().sort((a, b) => order.indexOf(b.tier) - order.indexOf(a.tier)).map(x => `<div class="mi" style="--c:${PCOL[x.tier]}">
-        <div style="flex:1;text-align:left"><b>${partName(x)}</b><div>${tierTag(x.tier)} <span class="small muted">${partFx(x.slot, x.tier)}</span></div></div>
-        <button class="btn red" style="flex:none;padding:6px 10px" onclick="this.disabled=true;act('sell_parts',{ids:[${x.id}]})">${fmt(CFG.part_tiers[x.tier].value)}</button></div>`).join('')}</div>
+    const items2 = list.slice().sort((a, b) => order.indexOf(b.tier) - order.indexOf(a.tier)).map(x => ({ k: 'p' + x.id, ref: x.id, value: CFG.part_tiers[x.tier].value, color: PCOL[x.tier],
+      html: `<div style="flex:1;text-align:left"><b>${partName(x)}</b><div>${tierTag(x.tier)} <span class="small muted">${partFx(x.slot, x.tier)}</span></div></div>` }));
+    $('spinOut').outerHTML = `<div class="result"><h2 style="color:${PCOL[best.tier]}">${title}</h2>${selList('parts', items2)}
       <div class="btns"><button class="btn" onclick="openParts('${id}',${count})">Ещё ${count > 1 ? '×' + count + ' ' : 'раз '}· ${fmt(c.price * count)}</button></div>
-      <div class="btns"><button class="btn red" onclick="act('sell_parts',{ids:[${ids}]}).then(r=>r&&closeSheet())">💵 Продать ${list.length > 1 ? 'все' : ''} · ${fmt(total)}</button><button class="btn ghost" onclick="closeSheet()">В инвентарь</button></div></div>`;
+      <div class="btns"><button class="btn ghost" onclick="closeSheet()">В инвентарь</button></div></div>`;
   }, D + 200);
 }
 async function sellCar(cid) { const car = S.cars.find(c => c.id === cid); if (await ask(`Продать ${CFG.cars[car.model].name} за ${fmt(car.value)}?`)) act('sell_car', { car: cid }); }
@@ -1198,11 +1350,12 @@ function vCases() {
   const free = S.free_cases.std || 0;
   if (free) h += `<div class="card" style="outline:2px solid var(--green)"><div class="row"><h3>🎁 Бесплатный кейс</h3><span class="pill g">×${free}</span></div>
     <div class="small muted">Награда за неделю бонусов подряд</div><div class="btns"><button class="btn" onclick="spin('std',true)">Открыть бесплатно</button></div></div>`;
-  h += Object.entries(CFG.cases).map(([id, c]) => `<div class="card" ${c.seasonal ? 'style="background:linear-gradient(135deg,#3a2410,#181b22)"' : ''}>
+  h += Object.entries(CFG.cases).map(([id, c]) => `<div class="card" ${c.seasonal ? 'style="background:linear-gradient(135deg,#3a2410,#181b22)"' : c.country === 'ru' ? 'style="background:linear-gradient(135deg,#14224a,#181b22)"' : ''}>
     <div class="row"><h3>${c.name}${c.seasonal ? ' <span class="pill">сезонный</span>' : ''}</h3><span class="price">${fmt(c.price)}</span></div>
+    ${c.country === 'ru' ? `<div style="margin:6px 0">${plateImg(id === 'ru' ? 'К458МР 23' : 'А777АА 77', 'sm')}</div><div class="small muted">Российские номера формата А777АА 77</div>` : ''}
     ${chancesBar(c.chances)}<div class="btns"><button class="btn ${S.money < c.price * caseCount ? 'sec' : ''}" onclick="spin('${id}',false,caseCount)">Открыть${caseCount > 1 ? ` ×${caseCount} · ${fmt(c.price * caseCount)}` : ''}</button></div></div>`).join('');
   h += `<div class="card"><h3>Редкость номеров</h3><div class="list">` + CFG.rarity_order.slice().reverse().map(t => `<div class="row" style="align-items:flex-start"><div>
-    <div class="tier t-${t}">${CFG.rarity[t].emoji} ${CFG.rarity[t].name}</div><div class="small muted">${CFG.rarity_rules[t]}</div></div><b style="white-space:nowrap">${fmt(CFG.rarity[t].value)}</b></div>`).join('') + `</div></div>`;
+    <div class="tier t-${t}">${CFG.rarity[t].emoji} ${CFG.rarity[t].name}</div><div class="small muted">🇧🇾 ${CFG.rarity_rules[t]}</div><div class="small muted">🇷🇺 ${CFG.rarity_rules_ru[t]}</div></div><b style="white-space:nowrap">${fmt(CFG.rarity[t].value)}</b></div>`).join('') + `</div></div>`;
   return h;
 }
 function vMine() {
@@ -1212,7 +1365,7 @@ function vMine() {
     const r = CFG.rarity[p.tier], car = p.car_id ? S.cars.find(c => c.id === p.car_id) : null;
     return `<div class="card pcard" style="--c:${tierColor(p.tier)}">${plateImg(p.num, '', p.style)}
       <div class="row" style="margin-top:10px"><span class="tier t-${p.tier}">${r.emoji} ${r.name}${p.style !== 'std' ? ` · <span class="pill">${CFG.plate_styles[p.style].name}</span>` : ''}</span><b>${fmt(p.value)}</b></div>
-      <div class="small muted">📍 ${CFG.regions[+p.num.slice(-1)]}${car ? ` · 🚗 ${esc(CFG.cars[car.model].name)}` : ''}</div>
+      <div class="small muted">📍 ${regionOf(p.num)}${car ? ` · 🚗 ${esc(CFG.cars[car.model].name)}` : ''}</div>
       <div class="menu">
         <button onclick="plateToCar('${p.num}')"><span class="ic">🚗</span><span class="t">На машину</span><span class="r"></span></button>
         <button onclick="styleSheet('${p.num}')"><span class="ic">🎨</span><span class="t">Цвет номера</span><span class="r">${CFG.plate_styles[p.style].name}</span></button>
@@ -1247,6 +1400,14 @@ function fakePlate(t) {
   else { d = rnd(2) ? String(1 + rnd(9)).repeat(4) : '000' + (1 + rnd(9)); if (t === 'legend') { const c = rl(); l = c + c; } }
   return `${d} ${l}-${1 + rnd(7)}`;
 }
+const RUL = 'АВЕКМНОРСТУХ', rul = () => RUL[rnd(12)];
+function fakeRu(t) {
+  const a = String(rnd(10)), b = String((+a + 1 + rnd(8)) % 10), regs = Object.keys(CFG.ru_regions), reg = regs[rnd(regs.length)];
+  let d = String(rnd(998) + 1).padStart(3, '0'), L = rul() + rul() + rul();
+  if (t === 'nice') d = a + a + b; else if (t === 'rare') d = a + b + a;
+  else if (t === 'epic') d = a + a + a; else if (t === 'legend') { d = a + a + a; const c = rul(); L = c + c + c; }
+  return `${L[0]}${d}${L.slice(1)} ${reg}`;
+}
 function rollTier(ch) { let x = Math.random() * 100; for (const [t, v] of Object.entries(ch)) { if ((x -= v) <= 0) return t; } return Object.keys(ch)[0]; }
 async function quickSell(nums) { const r = await act('sell_plates', { nums }); if (r) closeSheet(); }
 async function spin(caseId, free, count = 1) {
@@ -1258,7 +1419,7 @@ async function spin(caseId, free, count = 1) {
   const list = res.spins || [res.spin], order = CFG.rarity_order;
   const best = list.reduce((a, b) => order.indexOf(b.tier) > order.indexOf(a.tier) ? b : a);
   const W = 132, GAP = 8, N = 46, WIN = 40, items = [];
-  for (let i = 0; i < N; i++) { const t = i === WIN ? best.tier : rollTier(c.chances); items.push({ t, num: i === WIN ? best.num : fakePlate(t) }); }
+  for (let i = 0; i < N; i++) { const t = i === WIN ? best.tier : rollTier(c.chances); items.push({ t, num: i === WIN ? best.num : (c.country === 'ru' ? fakeRu(t) : fakePlate(t)) }); }
   sheetLocked = true;
   openSheet(free ? '🎁 Бесплатный кейс' : c.name + (count > 1 ? ` ×${count}` : ''), `<div class="reel" id="reel"><div class="marker"></div><div class="strip" id="strip">
     ${items.map(x => `<div class="ri" style="--c:${tierColor(x.t)}"><div class="mp">${x.num}</div></div>`).join('')}</div></div>
@@ -1276,20 +1437,15 @@ async function spin(caseId, free, count = 1) {
     const again = free ? '' : `<div class="btns"><button class="btn" onclick="spin('${caseId}',false,${count})">🎰 Ещё ${count > 1 ? '×' + count + ' ' : 'раз '}· ${fmt(c.price * count)}</button></div>`;
     if (list.length === 1) {
       $('spinOut').outerHTML = `<div class="result glow-${sp.tier}"><h2 class="t-${sp.tier}">${title}</h2>${plateImg(sp.num)}
-        <div class="small muted">📍 ${CFG.regions[+sp.num.slice(-1)]}</div>${again}
+        <div class="small muted">📍 ${regionOf(sp.num)}</div>${again}
         <div class="btns"><button class="btn red" onclick="quickSell(['${sp.num}'])">💵 Продать · ${fmt(sp.value)}</button><button class="btn sec" onclick="closeSheet();plateToCar('${sp.num}')">🚗 На машину</button></div>
         <div class="btns"><button class="btn ghost" onclick="closeSheet()">Забрать в коллекцию</button></div></div>`;
       return;
     }
-    const total = list.reduce((a, x) => a + x.value, 0), commons = list.filter(x => x.tier === 'common' || x.tier === 'nice');
-    const js = arr => JSON.stringify(arr.map(x => x.num)).replace(/"/g, "'");
-    $('spinOut').outerHTML = `<div class="result"><h2 class="t-${sp.tier}">${title}</h2>
-      <div class="multi" style="margin:10px 0">${list.slice().sort((a, b) => order.indexOf(b.tier) - order.indexOf(a.tier)).map(x => `<div class="mi" style="--c:${tierColor(x.tier)}">
-        <div class="mp">${x.num}</div><span class="small t-${x.tier}">${CFG.rarity[x.tier].emoji}</span><button class="btn red" style="flex:none;padding:6px 10px" onclick="this.disabled=true;act('sell_plates',{nums:['${x.num}']})">${fmt(x.value)}</button></div>`).join('')}</div>
-      ${again}
-      <div class="btns"><button class="btn red" onclick="quickSell(${js(list)})">💵 Продать все · ${fmt(total)}</button>
-        ${commons.length && commons.length < list.length ? `<button class="btn sec" onclick="quickSell(${js(commons)})">Продать дешёвые (${commons.length})</button>` : ''}</div>
-      <div class="btns"><button class="btn ghost" onclick="closeSheet()">Забрать всё в коллекцию</button></div></div>`;
+    const items2 = list.slice().sort((a, b) => order.indexOf(b.tier) - order.indexOf(a.tier)).map(x => ({ k: x.num.replace(/\W/g, '_'), ref: x.num, value: x.value, color: tierColor(x.tier),
+      html: `<div class="mp">${x.num}</div><span class="small t-${x.tier}">${CFG.rarity[x.tier].emoji}</span>` }));
+    $('spinOut').outerHTML = `<div class="result"><h2 class="t-${sp.tier}">${title}</h2>${selList('plates', items2)}${again}
+      <div class="btns"><button class="btn ghost" onclick="closeSheet()">Забрать в коллекцию</button></div></div>`;
   }, D + 200);
 }
 let aucTimer = null;
@@ -1323,8 +1479,9 @@ function vTop() {
   const medal = i => ['🥇', '🥈', '🥉'][i] || (i + 1);
   return `<div class="card"><h3>🏆 Самые богатые</h3><div class="small muted">Нажми на игрока — откроется его профиль</div>` + d.top.map((x, i) => `
     <div class="top-row ${x.me ? 'me' : ''}" onclick="${x.me ? '' : `openProfile(${x.id})`}"><div class="n">${medal(i)}</div>
-      <div class="flex1"><b>${esc(x.name)}${x.me ? ' (ты)' : ''}</b><div class="small muted">${fmt(x.worth)} · день ${x.day}${x.car ? ' · 🚗 ' + esc(x.car) : ''}</div></div>
-      ${x.plate ? `<img class="plate xs" src="${plateSrc(x.plate, x.plate_style)}" alt="">` : ''}</div>`).join('') +
+      <div class="flex1"><b>${esc(x.name)}${x.me ? ' (ты)' : ''}</b>${x.lux ? ` <span>${x.lux}</span>` : ''}<div class="small muted">${fmt(x.worth)} · день ${x.day}${x.car ? ' · 🚗 ' + esc(x.car) : ''}</div></div>
+      <div style="flex:none;display:flex;flex-direction:column;align-items:center;gap:3px">${x.model ? `<img src="${carSrc(x.model)}" style="width:76px;height:34px;object-fit:contain" alt="">` : ''}
+      ${x.plate ? `<img class="plate xs" src="${plateSrc(x.plate, x.plate_style)}" alt="">` : ''}</div></div>`).join('') +
     (d.my_place > 30 ? `<div class="small muted" style="margin-top:10px">Твоё место: ${d.my_place} из ${d.total}</div>` : '') + `</div>`;
 }
 async function openProfile(id) {
@@ -1334,6 +1491,7 @@ async function openProfile(id) {
   openSheet(`👤 ${esc(p.name)}`, `<div class="kv"><span>Капитал</span><b>${fmt(p.worth)}</b><span>Город</span><b>${CFG.cities[p.city].name}</b>
       <span>Образование</span><b>${CFG.edu_names[p.edu]}</b><span>Бизнесов / объектов</span><b>${p.biz} / ${p.prop}</b>
       <span>Гонки</span><b>🏆 ${p.stats.races_won || 0} · 💨 ${p.stats.races_lost || 0}</b><span>Серия бонусов</span><b>${p.streak} дн.</b></div>
+    ${p.lux ? `<div style="margin-top:8px;font-size:22px">${p.lux}</div>` : ''}
     ${p.sets.length ? `<div style="margin-top:10px">${p.sets.map(s => `<span class="pill g" style="margin-right:4px">${CFG.sets[s].icon} ${CFG.sets[s].name}</span>`).join('')}</div>` : ''}
     <div class="btns"><button class="btn" onclick="sendMoney(${id})">💸 Перевести</button><button class="btn sec" onclick="raceSetup(${id},'${esc(p.name).replace(/'/g, '')}')">🏁 Гонка</button></div>
     <div class="btns"><button class="btn sec" onclick="giftPlate(null,${id})">🎁 Подарить номер</button><button class="btn sec" onclick="swapSetup(${id})">🔄 Обмен</button></div>
